@@ -1,3 +1,15 @@
-### 模块说明
-- app 入口模块<br>
-- appbase 基础模块：基类Activity、网络请求、工具类、配置文件等<br>
+# Kone (Kino-One)
+
+Kone is a specialized Android application designed for Point of Care Testing (POCT) biomarker analysis.
+
+## Project Links
+- [Documentation Index](docs/INDEX.md)
+- [Architecture Overview](docs/ARCHITECTURE.md)
+- [Business Logic](docs/BUSINESS_LOGIC.md)
+- [Hardware Communication](docs/HARDWARE_COMMUNICATION.md)
+
+## Development Setup
+Refer to the [Architecture Guide](docs/ARCHITECTURE.md) for details on the tech stack and environment requirements.
+
+## Design Assets
+Technical specifications and algorithm prototypes can be found in the \`design/\` folder.
