@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>API_Documentation</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+</head>
+<body>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#wlk-设备命令-api-文档"
+id="toc-wlk-设备命令-api-文档"><span class="toc-section-number">1</span>
+WLK 设备命令 API 文档</a>
+<ul>
+<li><a href="#概述" id="toc-概述"><span
+class="toc-section-number">1.1</span> 概述</a></li>
+<li><a href="#通信帧结构" id="toc-通信帧结构"><span
+class="toc-section-number">1.2</span> 通信帧结构</a>
+<ul>
+<li><a href="#命令帧格式" id="toc-命令帧格式"><span
+class="toc-section-number">1.2.1</span> 命令帧格式</a></li>
+<li><a href="#响应帧格式" id="toc-响应帧格式"><span
+class="toc-section-number">1.2.2</span> 响应帧格式</a></li>
+</ul></li>
+<li><a href="#系统信息" id="toc-系统信息"><span
+class="toc-section-number">1.3</span> 系统信息</a></li>
+<li><a href="#命令索引表" id="toc-命令索引表"><span
+class="toc-section-number">1.4</span> 命令索引表</a></li>
+<li><a href="#action命令返回值索引" id="toc-action命令返回值索引"><span
+class="toc-section-number">1.5</span> ACTION命令返回值索引</a>
+<ul>
+<li><a href="#action响应码" id="toc-action响应码"><span
+class="toc-section-number">1.5.1</span> ACTION响应码</a></li>
+<li><a href="#action类型" id="toc-action类型"><span
+class="toc-section-number">1.5.2</span> ACTION类型</a></li>
+<li><a href="#动作状态-action_state_t"
+id="toc-动作状态-action_state_t"><span
+class="toc-section-number">1.5.3</span> 动作状态
+(action_state_t)</a></li>
+</ul></li>
+<li><a href="#命令列表" id="toc-命令列表"><span
+class="toc-section-number">1.6</span> 命令列表</a>
+<ul>
+<li><a href="#帧结构说明" id="toc-帧结构说明"><span
+class="toc-section-number">1.6.1</span> 帧结构说明</a></li>
+<li><a href="#基础命令" id="toc-基础命令"><span
+class="toc-section-number">1.6.2</span> 1. 基础命令</a></li>
+<li><a href="#gpio-控制命令" id="toc-gpio-控制命令"><span
+class="toc-section-number">1.6.3</span> 2. GPIO 控制命令</a></li>
+<li><a href="#寄存器操作命令" id="toc-寄存器操作命令"><span
+class="toc-section-number">1.6.4</span> 3. 寄存器操作命令</a></li>
+<li><a href="#动作命令-需要轮询状态"
+id="toc-动作命令-需要轮询状态"><span
+class="toc-section-number">1.6.5</span> 4. 动作命令
+(需要轮询状态)</a></li>
+<li><a href="#数据查询命令" id="toc-数据查询命令"><span
+class="toc-section-number">1.6.6</span> 5. 数据查询命令</a></li>
+</ul></li>
+<li><a href="#动作状态机" id="toc-动作状态机"><span
+class="toc-section-number">1.7</span> 动作状态机</a>
+<ul>
+<li><a href="#动作状态说明-action_state_t"
+id="toc-动作状态说明-action_state_t"><span
+class="toc-section-number">1.7.1</span> 动作状态说明
+(action_state_t)</a></li>
+<li><a href="#电机状态-motor_state_t"
+id="toc-电机状态-motor_state_t"><span
+class="toc-section-number">1.7.2</span> 电机状态
+(motor_state_t)</a></li>
+</ul></li>
+<li><a href="#通信协议注意事项" id="toc-通信协议注意事项"><span
+class="toc-section-number">1.8</span> 通信协议注意事项</a>
+<ul>
+<li><a href="#常见错误响应示例" id="toc-常见错误响应示例"><span
+class="toc-section-number">1.8.1</span> 常见错误响应示例</a></li>
+</ul></li>
+<li><a href="#错误代码" id="toc-错误代码"><span
+class="toc-section-number">1.9</span> 错误代码</a></li>
+<li><a href="#使用示例" id="toc-使用示例"><span
+class="toc-section-number">1.10</span> 使用示例</a>
+<ul>
+<li><a href="#基本工作流程" id="toc-基本工作流程"><span
+class="toc-section-number">1.10.1</span> 基本工作流程</a></li>
+<li><a href="#扫描流程" id="toc-扫描流程"><span
+class="toc-section-number">1.10.2</span> 扫描流程</a></li>
+</ul></li>
+<li><a href="#通信帧示例" id="toc-通信帧示例"><span
+class="toc-section-number">1.11</span> 通信帧示例</a>
+<ul>
+<li><a href="#简单命令示例" id="toc-简单命令示例"><span
+class="toc-section-number">1.11.1</span> 简单命令示例</a></li>
+<li><a href="#复杂命令示例" id="toc-复杂命令示例"><span
+class="toc-section-number">1.11.2</span> 复杂命令示例</a></li>
+<li><a href="#数据类型说明" id="toc-数据类型说明"><span
+class="toc-section-number">1.11.3</span> 数据类型说明</a></li>
+<li><a href="#crc-8-算法详细说明" id="toc-crc-8-算法详细说明"><span
+class="toc-section-number">1.11.4</span> CRC-8 算法详细说明</a></li>
+<li><a href="#字节序说明" id="toc-字节序说明"><span
+class="toc-section-number">1.11.5</span> 字节序说明</a></li>
+</ul></li>
+</ul></li>
+</ul>
+</nav>
+<h1 data-number="1" id="wlk-设备命令-api-文档"><span
+class="header-section-number">1</span> WLK 设备命令 API 文档</h1>
+<h2 data-number="1.1" id="概述"><span
+class="header-section-number">1.1</span> 概述</h2>
+<ul>
+<li>通过 UART 串口通信协议接收和处理命令
+<ul>
+<li>BAUDRATE: 230400</li>
+<li>WordLen: 8bits</li>
+<li>StopBits: 1bit</li>
+<li>Parity: None</li>
+</ul></li>
+<li>采用基于帧的通信机制</li>
+</ul>
+<h2 data-number="1.2" id="通信帧结构"><span
+class="header-section-number">1.2</span> 通信帧结构</h2>
+<h3 data-number="1.2.1" id="命令帧格式"><span
+class="header-section-number">1.2.1</span> 命令帧格式</h3>
+<div class="sourceCode" id="cb1"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="op">[</span>ADDR<span class="op">]</span> <span class="op">[</span>CMD<span class="op">]</span> <span class="op">[</span>DATA<span class="op">...]</span> <span class="op">[</span>CRC<span class="op">]</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span>      <span class="op">|</span>      <span class="op">|</span>       <span class="op">|</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span>      <span class="op">|</span>      <span class="op">|</span>       <span class="op">+--</span> CRC校验字节</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span>      <span class="op">|</span>      <span class="op">+----------</span> 命令数据 <span class="op">(</span>可变长度<span class="op">)</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span>      <span class="op">+-----------------</span> 命令字节</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>  <span class="op">+------------------------</span> 设备地址字节 <span class="op">(</span>固定为 <span class="bn">0x21</span> <span class="ch">&#39;!&#39;</span><span class="op">)</span></span></code></pre></div>
+<h3 data-number="1.2.2" id="响应帧格式"><span
+class="header-section-number">1.2.2</span> 响应帧格式</h3>
+<h4 data-number="1.2.2.1" id="正常响应帧"><span
+class="header-section-number">1.2.2.1</span> 正常响应帧</h4>
+<div class="sourceCode" id="cb2"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="op">[</span>ADDR<span class="op">]</span> <span class="op">[|]</span> <span class="op">[</span>RESPONSE_DATA<span class="op">...]</span> <span class="op">[</span>CRC<span class="op">]</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span>     <span class="op">|</span>         <span class="op">|</span>            <span class="op">|</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span>     <span class="op">|</span>         <span class="op">|</span>            <span class="op">+--</span> CRC校验字节</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span>     <span class="op">|</span>         <span class="op">+---------------</span> 响应数据内容</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span>     <span class="op">+---------------------</span> 分隔符 <span class="ch">&#39;|&#39;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  <span class="op">+---------------------------</span> 设备地址字节 <span class="op">(</span>固定为 <span class="bn">0x21</span> <span class="ch">&#39;!&#39;</span><span class="op">)</span></span></code></pre></div>
+<h4 data-number="1.2.2.2"
+id="错误响应帧主要是crc错误底层命令参数错误"><span
+class="header-section-number">1.2.2.2</span>
+错误响应帧(主要是CRC错误、底层命令参数错误)</h4>
+<div class="sourceCode" id="cb3"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="op">[</span>ADDR<span class="op">]</span> <span class="op">[?|]</span> <span class="op">[</span>ERROR_MESSAGE<span class="op">...]</span> <span class="op">[</span>CRC<span class="op">]</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span>     <span class="op">|</span>         <span class="op">|</span>              <span class="op">|</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span>     <span class="op">|</span>         <span class="op">|</span>              <span class="op">+--</span> CRC校验字节</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span>     <span class="op">|</span>         <span class="op">+-----------------</span> 错误信息内容</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span>     <span class="op">+-----------------------</span> 错误标识 <span class="ch">&#39;?</span><span class="er">|</span><span class="ch">&#39;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  <span class="op">+-----------------------------</span> 设备地址字节 <span class="op">(</span>固定为 <span class="bn">0x21</span> <span class="ch">&#39;!&#39;</span><span class="op">)</span></span></code></pre></div>
+<h2 data-number="1.3" id="系统信息"><span
+class="header-section-number">1.3</span> 系统信息</h2>
+<ul>
+<li><p><strong>当前固件版本</strong>: v0.1.1</p></li>
+<li><p><strong>设备地址</strong>: <code>0x21</code> (‘!’)</p></li>
+<li><p><strong>通信协议</strong>: UART + 基于帧的协议 + CRC校验</p></li>
+<li><p><strong>帧最大长度</strong>: 64字节 (MCU &lt;– PC)</p></li>
+</ul>
+<hr />
+<h2 data-number="1.4" id="命令索引表"><span
+class="header-section-number">1.4</span> 命令索引表</h2>
+<table>
+<thead>
+<tr class="header">
+<th>命令名称</th>
+<th>十六进制值</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>CMD_POLL</td>
+<td>0x01</td>
+<td>系统状态轮询</td>
+</tr>
+<tr class="even">
+<td>CMD_HI</td>
+<td>0x02</td>
+<td>获取设备信息</td>
+</tr>
+<tr class="odd">
+<td>CMD_TEST</td>
+<td>0x03</td>
+<td>测试命令</td>
+</tr>
+<tr class="even">
+<td>CMD_REG_WRITE</td>
+<td>0x04</td>
+<td>写电机寄存器</td>
+</tr>
+<tr class="odd">
+<td>CMD_REG_READ</td>
+<td>0x05</td>
+<td>读电机寄存器</td>
+</tr>
+<tr class="even">
+<td>CMD_GPIO_READ</td>
+<td>0x06</td>
+<td>读取GPIO状态</td>
+</tr>
+<tr class="odd">
+<td>CMD_GPIO_WRITE</td>
+<td>0x07</td>
+<td>写入GPIO状态</td>
+</tr>
+<tr class="even">
+<td>CMD_ACTION_CANCEL</td>
+<td>0x08</td>
+<td>取消当前动作</td>
+</tr>
+<tr class="odd">
+<td>-</td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr class="even">
+<td>CMD_ACTION_HOMING</td>
+<td>0x40</td>
+<td>归零操作</td>
+</tr>
+<tr class="odd">
+<td>CMD_ACTION_MOVE_DURATION</td>
+<td>0x41</td>
+<td>定时运动</td>
+</tr>
+<tr class="even">
+<td>CMD_ACTION_MOVE_TO_SS</td>
+<td>0x42</td>
+<td>移动到传感器</td>
+</tr>
+<tr class="odd">
+<td>CMD_ACTION_ABSORB</td>
+<td>0x43</td>
+<td>吸收操作 (保留)</td>
+</tr>
+<tr class="even">
+<td>CMD_ACTION_SCAN</td>
+<td>0x44</td>
+<td>激光扫描</td>
+</tr>
+<tr class="odd">
+<td>CMD_ACTION_QUERY_DATA</td>
+<td>0x45</td>
+<td>查询扫描数据</td>
+</tr>
+<tr class="even">
+<td>CMD_ACTION_READ_QR</td>
+<td>0x46</td>
+<td>QR码扫描</td>
+</tr>
+</tbody>
+</table>
+<h2 data-number="1.5" id="action命令返回值索引"><span
+class="header-section-number">1.5</span> ACTION命令返回值索引</h2>
+<h3 data-number="1.5.1" id="action响应码"><span
+class="header-section-number">1.5.1</span> ACTION响应码</h3>
+<table>
+<thead>
+<tr class="header">
+<th>返回值名称</th>
+<th>数值</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>A_REV_DOING</td>
+<td>0</td>
+<td>正在执行</td>
+</tr>
+<tr class="even">
+<td>A_REV_BUSY</td>
+<td>-1</td>
+<td>系统忙，已有动作在执行</td>
+</tr>
+<tr class="odd">
+<td>A_REV_BAD_PARAM</td>
+<td>-2</td>
+<td>参数错误</td>
+</tr>
+<tr class="even">
+<td>A_REV_NEED_HOMING</td>
+<td>-3</td>
+<td>需要先执行归零操作</td>
+</tr>
+</tbody>
+</table>
+<h3 data-number="1.5.2" id="action类型"><span
+class="header-section-number">1.5.2</span> ACTION类型</h3>
+<table>
+<thead>
+<tr class="header">
+<th>动作类型名称</th>
+<th>数值</th>
+<th>描述</th>
+<th>-</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>ACTION_NONE</td>
+<td>0</td>
+<td>无动作</td>
+<td>-</td>
+</tr>
+<tr class="even">
+<td>ACTION_HOMING</td>
+<td>1</td>
+<td>归零操作</td>
+<td>-</td>
+</tr>
+<tr class="odd">
+<td>ACTION_MOVE_DURATION</td>
+<td>2</td>
+<td>定时运动</td>
+<td>-</td>
+</tr>
+<tr class="even">
+<td>ACTION_MOVE_TO_SS</td>
+<td>3</td>
+<td>移动到传感器</td>
+<td>-</td>
+</tr>
+<tr class="odd">
+<td>ACTION_ABSORB</td>
+<td>4</td>
+<td>吸水操作 (暂无)</td>
+<td>-</td>
+</tr>
+<tr class="even">
+<td>ACTION_SCAN</td>
+<td>5</td>
+<td>激光扫描</td>
+<td>-</td>
+</tr>
+<tr class="odd">
+<td>ACTION_QUERY_DATA</td>
+<td>6</td>
+<td>查询数据</td>
+<td>-</td>
+</tr>
+<tr class="even">
+<td>ACTION_READ_QR</td>
+<td>7</td>
+<td>QR码扫描</td>
+<td>-</td>
+</tr>
+</tbody>
+</table>
+<h3 data-number="1.5.3" id="动作状态-action_state_t"><span
+class="header-section-number">1.5.3</span> 动作状态
+(action_state_t)</h3>
+<table>
+<thead>
+<tr class="header">
+<th>状态名称</th>
+<th>数值</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>ACTION_STATE_IDLE</td>
+<td>0</td>
+<td>空闲状态</td>
+</tr>
+<tr class="even">
+<td>ACTION_STATE_RUNNING</td>
+<td>1</td>
+<td>运行中</td>
+</tr>
+<tr class="odd">
+<td>ACTION_STATE_COMPLETED</td>
+<td>2</td>
+<td>完成</td>
+</tr>
+<tr class="even">
+<td>ACTION_STATE_ERROR</td>
+<td>3</td>
+<td>错误</td>
+</tr>
+<tr class="odd">
+<td>ACTION_STATE_CANCELLED</td>
+<td>4</td>
+<td>已取消</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 data-number="1.6" id="命令列表"><span
+class="header-section-number">1.6</span> 命令列表</h2>
+<h3 data-number="1.6.1" id="帧结构说明"><span
+class="header-section-number">1.6.1</span> 帧结构说明</h3>
+<p>所有命令都遵循统一的帧结构。下面列出各命令的具体帧格式：</p>
+<h4 data-number="1.6.1.1" id="简单命令帧-无参数"><span
+class="header-section-number">1.6.1.1</span> 简单命令帧 (无参数)</h4>
+<div class="sourceCode" id="cb4"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="op">[</span><span class="bn">0x21</span><span class="op">]</span> <span class="op">[</span>CMD<span class="op">]</span> <span class="op">[</span>CRC<span class="op">]</span></span></code></pre></div>
+<h4 data-number="1.6.1.2" id="复杂命令帧-带参数"><span
+class="header-section-number">1.6.1.2</span> 复杂命令帧 (带参数)</h4>
+<div class="sourceCode" id="cb5"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="op">[</span><span class="bn">0x21</span><span class="op">]</span> <span class="op">[</span>CMD<span class="op">]</span> <span class="op">[</span>PARAM1<span class="op">]</span> <span class="op">[</span>PARAM2<span class="op">]</span> <span class="op">...</span> <span class="op">[</span>CRC<span class="op">]</span></span></code></pre></div>
+<h3 data-number="1.6.2" id="基础命令"><span
+class="header-section-number">1.6.2</span> 1. 基础命令</h3>
+<h4 data-number="1.6.2.1" id="cmd_poll-0x01---系统状态轮询"><span
+class="header-section-number">1.6.2.1</span> 1.1 CMD_POLL (0x01) -
+系统状态轮询</h4>
+<ul>
+<li><p><strong>命令帧</strong>: <code>[0x21] [0x01] [CRC]</code><br />
+</p></li>
+<li><p><strong>用途</strong>: 获取系统当前状态信息<br />
+</p></li>
+<li><p><strong>参数</strong>: 无<br />
+</p></li>
+<li><p><strong>响应格式</strong>:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode c"><code class="sourceCode c"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="op">!|</span>a<span class="op">:[</span>action_type<span class="op">],</span>s<span class="op">:[</span>status<span class="op">]-[</span>error_str<span class="op">],</span>m<span class="op">:[</span>h_motor_state<span class="op">]-[</span>v_motor_state<span class="op">]</span>`</span></code></pre></div></li>
+<li><p><strong>响应示例</strong>:</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode c"><code class="sourceCode c"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="op">!|</span>a<span class="op">:</span><span class="dv">0</span><span class="op">,</span>s<span class="op">:</span>IDLE<span class="op">-</span>null<span class="op">,</span>m<span class="op">:</span><span class="dv">0</span><span class="op">-</span><span class="dv">0</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="op">!|</span>a<span class="op">:</span><span class="dv">1</span><span class="op">,</span>s<span class="op">:</span>HOMING_V_MOTOR<span class="op">-</span>moo<span class="op">,</span>m<span class="op">:</span><span class="dv">0</span><span class="op">-</span><span class="dv">1</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="op">!|</span>a<span class="op">:</span><span class="dv">4</span><span class="op">,</span>s<span class="op">:</span>SCAN<span class="op">:</span><span class="dv">1234</span><span class="op">-</span>len<span class="op">:</span><span class="dv">1234</span><span class="op">,</span>m<span class="op">:</span><span class="dv">1</span><span class="op">-</span><span class="dv">0</span></span></code></pre></div></li>
+</ul>
+<p><strong>说明</strong>:</p>
+<ul>
+<li><code>a</code>: 当前动作类型 (0=NONE, 1=HOMING, 2=MOVE_DURATION,
+3=MOVE_TO_SS, 4=SCAN, 6=READ_QR)</li>
+<li><code>s</code>:
+<strong>状态字符串</strong>-<strong>错误信息</strong></li>
+<li><code>m</code>: 水平电机状态-垂直电机状态 (0=IDLE, 1=MOVING, 2=STOP,
+3=ERROR)</li>
+</ul>
+<h4 data-number="1.6.2.2" id="cmd_hi-0x02---获取设备信息"><span
+class="header-section-number">1.6.2.2</span> 1.2 CMD_HI (0x02) -
+获取设备信息</h4>
+<ul>
+<li><p><strong>命令帧</strong>: <code>[0x21] [0x02] [CRC]</code><br />
+</p></li>
+<li><p><strong>用途</strong>:
+获取<strong>固件版本</strong>和<strong>唯一ID</strong></p></li>
+<li><p><strong>参数</strong>: 无<br />
+</p></li>
+<li><p><strong>响应格式</strong>:
+<code>!|ver:[version]~[uid_hex]</code></p></li>
+<li><p><strong>响应示例</strong>:</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode c"><code class="sourceCode c"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="op">!|</span>ver<span class="op">:</span>v0<span class="fl">.1</span><span class="er">.1</span><span class="op">~</span><span class="dv">1234567890</span><span class="er">abcdef12345678</span></span></code></pre></div></li>
+</ul>
+<h4 data-number="1.6.2.3" id="cmd_test-0x03---测试命令不要使用"><span
+class="header-section-number">1.6.2.3</span> 1.3 CMD_TEST (0x03) -
+测试命令(<strong>不要使用</strong>)</h4>
+<ul>
+<li><strong>命令帧</strong>: <code>[0x21] [0x03] [CRC]</code><br />
+</li>
+<li><strong>用途</strong>: 保留</li>
+<li><strong>参数</strong>: 无<br />
+</li>
+<li><strong>响应格式</strong>:
+<code>!|test:[val1], [val2], [val3]</code></li>
+</ul>
+<h3 data-number="1.6.3" id="gpio-控制命令"><span
+class="header-section-number">1.6.3</span> 2. GPIO 控制命令</h3>
+<h4 data-number="1.6.3.1" id="cmd_gpio_read-0x06---读取gpio状态"><span
+class="header-section-number">1.6.3.1</span> 2.1 CMD_GPIO_READ (0x06) -
+读取GPIO状态</h4>
+<ul>
+<li><p><strong>用途</strong>: 读取所有GPIO引脚状态和ADC值<br />
+</p></li>
+<li><p><strong>参数</strong>: 无<br />
+</p></li>
+<li><p><strong>响应格式</strong>:
+<code>!|ss_p:[val],ss_ud:[val],ss_start:[val],ss_stop:[val],ss_card:* [val],ld_p:[val],qr_tgl:[val],qr_rst:[val],adc:[adc1]-[adc2]</code></p></li>
+<li><p><strong>引脚说明</strong>:</p>
+<ul>
+<li><code>ss_p</code>: 传感器电源</li>
+<li><code>ss_ud</code>: 传感器上下方向</li>
+<li><code>ss_start</code>: 起始传感器</li>
+<li><code>ss_stop</code>: 停止传感器<br />
+</li>
+<li><code>ss_card</code>: 卡片传感器</li>
+<li><code>ld_p</code>: 激光器电源</li>
+<li><code>qr_tgl</code>: QR扫描器触发</li>
+<li><code>qr_rst</code>: QR扫描器复位</li>
+</ul></li>
+</ul>
+<h4 data-number="1.6.3.2"
+id="cmd_gpio_write-0x07---写入gpio状态-谨慎使用"><span
+class="header-section-number">1.6.3.2</span> 2.2 CMD_GPIO_WRITE (0x07) -
+写入GPIO状态 (<strong>谨慎使用</strong>)</h4>
+<ul>
+<li><strong>用途</strong>: 控制特定GPIO引脚输出<br />
+</li>
+<li><strong>格式</strong>:
+<code>![0x07][pin_id][pin_val][CRC]</code></li>
+<li><strong>参数</strong>:
+<ul>
+<li><code>pin_id</code>: 引脚ID (0-7)</li>
+<li><code>pin_val</code>: 引脚值 (0/1)</li>
+</ul></li>
+</ul>
+<p><strong>响应格式</strong>:
+<code>!|gpio_write:[pin_id],[pin_val]</code></p>
+<h3 data-number="1.6.4" id="寄存器操作命令"><span
+class="header-section-number">1.6.4</span> 3. 寄存器操作命令</h3>
+<h4 data-number="1.6.4.1" id="cmd_reg_write-0x04---写寄存器"><span
+class="header-section-number">1.6.4.1</span> 3.1 CMD_REG_WRITE (0x04) -
+写寄存器</h4>
+<ul>
+<li><strong>用途</strong>: 向TMC2300电机驱动器写入寄存器<br />
+</li>
+<li><strong>格式</strong>:
+<code>![0x04][node_addr][reg][data_4bytes][CRC]</code></li>
+<li><strong>参数</strong>:
+<ul>
+<li><code>node_addr</code>: 节点地址</li>
+<li><code>reg</code>: 寄存器地址</li>
+<li><code>data_4bytes</code>: 4字节数据</li>
+</ul></li>
+<li><strong>响应格式</strong>:
+<code>!|reg_write:[node_addr],[reg],0x[value]</code></li>
+</ul>
+<h4 data-number="1.6.4.2" id="cmd_reg_read-0x05---读寄存器"><span
+class="header-section-number">1.6.4.2</span> 3.2 CMD_REG_READ (0x05) -
+读寄存器</h4>
+<ul>
+<li><strong>用途</strong>: 从TMC2300电机驱动器读取寄存器<br />
+</li>
+<li><strong>格式</strong>:
+<code>![0x05][node_addr][reg][CRC]</code></li>
+<li><strong>参数</strong>**
+<ul>
+<li><code>node_addr</code>: 节点地址</li>
+<li><code>reg</code>: 寄存器地址</li>
+</ul></li>
+<li><strong>响应格式</strong>:
+<ul>
+<li>成功: <code>!|reg_read:[node_addr],[reg],0x[value]</code></li>
+<li>失败:
+<code>!|reg_read:[node_addr],[reg],err:[error_code]</code></li>
+</ul></li>
+</ul>
+<h3 data-number="1.6.5" id="动作命令-需要轮询状态"><span
+class="header-section-number">1.6.5</span> 4. 动作命令
+(需要轮询状态)</h3>
+<h4 data-number="1.6.5.1" id="cmd_action_homing-0x40---归零操作"><span
+class="header-section-number">1.6.5.1</span> 4.1 CMD_ACTION_HOMING
+(0x40) - 归零操作</h4>
+<ul>
+<li><strong>用途</strong>: 执行垂直和水平电机的归零操作<br />
+</li>
+<li><strong>参数</strong>: 无<br />
+</li>
+<li><strong>响应格式</strong>: <code>!|homing:[result]</code></li>
+<li><strong>轮询状态</strong> (通过CMD_POLL获取):
+<ul>
+<li><code>HOMING_START</code>: 开始归零</li>
+<li><code>HOMING_V_MOTOR</code>: 垂直电机归零中</li>
+<li><code>HOMING_V_COMPLETE</code>: 垂直电机归零完成</li>
+<li><code>HOMING_H_MOTOR</code>: 水平电机归零中<br />
+</li>
+<li><code>HOMING_H_COMPLETE</code>: 水平电机归零完成</li>
+<li><code>HOMING_COMPLETE</code>: 归零完成</li>
+</ul></li>
+<li><strong>结果码</strong>:
+<ul>
+<li><code>0</code>: A_REV_DOING - 正在执行</li>
+<li><code>-1</code>: A_REV_BUSY - 系统忙</li>
+<li><code>-2</code>: A_REV_BAD_PARAM - 参数错误</li>
+</ul></li>
+</ul>
+<h4 data-number="1.6.5.2"
+id="cmd_action_move_duration-0x41---定时运动"><span
+class="header-section-number">1.6.5.2</span> 4.2
+CMD_ACTION_MOVE_DURATION (0x41) - 定时运动</h4>
+<ul>
+<li><strong>命令帧</strong>:
+<code>[0x21] [0x41] [motor_id] [velocity_4bytes] [duration_4bytes] [CRC]</code><br />
+</li>
+<li><strong>用途</strong>: 控制指定电机以特定速度运动指定时间<br />
+</li>
+<li><strong>帧长度</strong>: 12字节<br />
+</li>
+<li><strong>参数</strong>:
+<ul>
+<li><code>motor_id</code>: 电机ID (0=水平, 1=垂直)</li>
+<li><code>velocity</code>: 目标速度 (int32, 单位: 步/秒)</li>
+<li><code>duration</code>: 运动时间 (uint32, 单位: 毫秒)</li>
+</ul></li>
+<li><strong>响应格式</strong>:
+<code>!|move_dur:[result].[motor_id],[velocity],[duration]</code></li>
+<li><strong>轮询状态</strong>: <code>MOVING</code></li>
+</ul>
+<h4 data-number="1.6.5.3"
+id="cmd_action_move_to_ss-0x42---移动到传感器"><span
+class="header-section-number">1.6.5.3</span> 4.3 CMD_ACTION_MOVE_TO_SS
+(0x42) - 移动到传感器</h4>
+<ul>
+<li><strong>命令帧</strong>:
+<code>[0x21] [0x42] [motor_id] [velocity_4bytes] [duration_4bytes] [ss_id] [CRC]</code><br />
+</li>
+<li><strong>用途</strong>: 控制电机移动直到触发指定传感器<br />
+</li>
+<li><strong>帧长度</strong>: 13字节<br />
+</li>
+<li><strong>参数</strong>:
+<ul>
+<li><code>motor_id</code>: 电机ID (0=水平, 1=垂直)</li>
+<li><code>velocity</code>: 目标速度 (int32)</li>
+<li><code>duration</code>: 最大运动时间 (uint32, 毫秒)</li>
+<li><code>ss_id</code>: 传感器ID (0/1)</li>
+</ul></li>
+<li><strong>响应格式</strong>:
+<code>!|move_to_ss:[result],[motor_id],[velocity],[duration],[ss_id]</code></li>
+<li><strong>轮询状态</strong>: <code>MOVING</code></li>
+</ul>
+<h4 data-number="1.6.5.4" id="cmd_action_scan-0x44---激光扫描"><span
+class="header-section-number">1.6.5.4</span> 4.4 CMD_ACTION_SCAN (0x44)
+- 激光扫描</h4>
+<ul>
+<li><strong>命令帧</strong>:
+<code>[0x21] [0x44] [velocity_4bytes] [duration_4bytes] [CRC]</code><br />
+</li>
+<li><strong>用途</strong>: 执行激光扫描，同时移动和采集ADC数据<br />
+</li>
+<li><strong>帧长度</strong>: 11字节<br />
+</li>
+<li><strong>参数</strong>:
+<ul>
+<li><code>velocity</code>: 扫描速度 (int32, 步/秒)</li>
+<li><code>duration</code>: 扫描时间 (uint32, 毫秒, 最大60秒)</li>
+</ul></li>
+<li><strong>响应格式</strong>:
+<code>!|scan:[result],[velocity],[duration]</code></li>
+<li><strong>轮询状态</strong>:
+<ul>
+<li><code>SCAN:[count]</code>: 扫描中，显示当前采集的数据点数量</li>
+<li>完成后错误信息显示: <code>len:[total_count]</code></li>
+</ul></li>
+<li><strong>结果码</strong>:
+<ul>
+<li><code>-3</code>: A_REV_NEED_HOMING - 需要先归零</li>
+</ul></li>
+</ul>
+<h4 data-number="1.6.5.5" id="cmd_action_read_qr-0x46---qr码扫描"><span
+class="header-section-number">1.6.5.5</span> 4.5 CMD_ACTION_READ_QR
+(0x46) - QR码扫描</h4>
+<ul>
+<li><strong>用途</strong>: 启动QR码扫描操作<br />
+</li>
+<li><strong>参数</strong>: 无<br />
+</li>
+<li><strong>响应格式</strong>: <code>!|read_qr:[result]</code></li>
+<li><strong>轮询状态</strong>:
+<ul>
+<li><code>QR_START</code>: 开始扫描</li>
+<li><code>QR_TRIGGER_LOW</code>: 触发信号拉低</li>
+<li><code>QR_SCANNING</code>: 扫描中</li>
+<li><code>QR_DATA_RECEIVED</code>: 数据接收完成</li>
+<li><code>QR_COMPLETE</code>: 扫描完成</li>
+<li><code>QR_TIMEOUT</code>: 超时 (3秒)</li>
+<li><code>QR_ERROR</code>: 错误</li>
+</ul></li>
+<li><strong>成功时错误信息显示</strong>:
+<code>QR:[扫描到的数据]</code></li>
+</ul>
+<h4 data-number="1.6.5.6"
+id="cmd_action_cancel-0x08---取消当前动作"><span
+class="header-section-number">1.6.5.6</span> 4.6 CMD_ACTION_CANCEL
+(0x08) - 取消当前动作</h4>
+<ul>
+<li><strong>用途</strong>: 取消当前正在执行的动作<br />
+</li>
+<li><strong>参数</strong>: 无<br />
+</li>
+<li><strong>响应格式</strong>: <code>!|cancel:[result]</code></li>
+<li><strong>说明</strong>:
+会停止所有电机运动，关闭激光器，重置QR扫描器</li>
+</ul>
+<h3 data-number="1.6.6" id="数据查询命令"><span
+class="header-section-number">1.6.6</span> 5. 数据查询命令</h3>
+<h4 data-number="1.6.6.1"
+id="cmd_action_query_data-0x45---查询扫描数据"><span
+class="header-section-number">1.6.6.1</span> 5.1 CMD_ACTION_QUERY_DATA
+(0x45) - 查询扫描数据</h4>
+<ul>
+<li><strong>用途</strong>: 获取最近一次扫描的ADC数据<br />
+</li>
+<li><strong>参数</strong>: 无<br />
+</li>
+<li><strong>响应格式</strong>:
+<ul>
+<li>无数据: <code>!|no_data</code></li>
+<li>有数据: 返回包含所有ADC采样点的数据包</li>
+</ul></li>
+<li><strong>数据包格式</strong>: 直接传输ADC缓冲区数据</li>
+</ul>
+<hr />
+<h2 data-number="1.7" id="动作状态机"><span
+class="header-section-number">1.7</span> 动作状态机</h2>
+<h3 data-number="1.7.1" id="动作状态说明-action_state_t"><span
+class="header-section-number">1.7.1</span> 动作状态说明
+(action_state_t)</h3>
+<ul>
+<li><code>ACTION_STATE_IDLE</code>: 空闲状态</li>
+<li><code>ACTION_STATE_RUNNING</code>: 运行中</li>
+<li><code>ACTION_STATE_COMPLETED</code>: 完成</li>
+<li><code>ACTION_STATE_ERROR</code>: 错误</li>
+<li><code>ACTION_STATE_CANCELLED</code>: 已取消</li>
+</ul>
+<h3 data-number="1.7.2" id="电机状态-motor_state_t"><span
+class="header-section-number">1.7.2</span> 电机状态 (motor_state_t)</h3>
+<ul>
+<li><code>MOTOR_STATE_IDLE</code> (0): 空闲</li>
+<li><code>MOTOR_STATE_MOVING</code> (1): 运动中</li>
+<li><code>MOTOR_STATE_STOP</code> (2): 停止</li>
+<li><code>MOTOR_STATE_ERROR</code> (3): 错误</li>
+</ul>
+<hr />
+<h2 data-number="1.8" id="通信协议注意事项"><span
+class="header-section-number">1.8</span> 通信协议注意事项</h2>
+<ol type="1">
+<li><strong>CRC-8校验</strong>:
+每个命令和响应都包含1字节CRC-8校验值，确保数据传输完整性</li>
+<li><strong>响应格式</strong>:
+<ul>
+<li>正常响应: <code>!|[响应内容]</code></li>
+<li>错误响应: <code>!?|[错误信息]</code>
+(底层错误、CRC错误、参数错误等)</li>
+</ul></li>
+<li><strong>超时处理</strong>:
+动作命令有超时机制，超时后自动进入错误状态</li>
+<li><strong>状态轮询</strong>:
+长时间动作需要通过CMD_POLL持续监控状态</li>
+<li><strong>互斥性</strong>: 同时只能执行一个动作命令</li>
+<li><strong>归零要求</strong>: 扫描功能需要先执行归零操作</li>
+<li><strong>帧长度</strong>: 所有通信帧不超过64字节</li>
+</ol>
+<h3 data-number="1.8.1" id="常见错误响应示例"><span
+class="header-section-number">1.8.1</span> 常见错误响应示例</h3>
+<div class="sourceCode" id="cb9"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="op">!?|</span>crc error                    # CRC校验失败</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="op">!?|</span>bad cmd<span class="op">:</span> <span class="op">(</span><span class="bn">0xFF</span><span class="op">)</span>             # 未知命令</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="op">!?|</span>bad gpio_write<span class="op">:</span> <span class="op">(</span><span class="bn">0x07</span><span class="op">)</span>      # GPIO写入参数错误</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="op">!?|</span>my addr should<span class="op">:</span> <span class="bn">0x21</span><span class="op">,</span> but got<span class="op">:</span> <span class="bn">0x22</span><span class="op">,</span> len<span class="op">(</span><span class="dv">5</span><span class="op">)</span>  # 地址错误</span></code></pre></div>
+<h2 data-number="1.9" id="错误代码"><span
+class="header-section-number">1.9</span> 错误代码</h2>
+<p>详细的动作命令返回值请参考上方的 <a
+href="#动作命令返回值索引">动作命令返回值索引</a> 部分。</p>
+<ul>
+<li><code>A_REV_DOING</code> (0): 正在执行</li>
+<li><code>A_REV_BUSY</code> (-1): 系统忙，请稍后重试</li>
+<li><code>A_REV_BAD_PARAM</code> (-2): 参数错误</li>
+<li><code>A_REV_NEED_HOMING</code> (-3): 需要先执行归零操作</li>
+</ul>
+<h2 data-number="1.10" id="使用示例"><span
+class="header-section-number">1.10</span> 使用示例</h2>
+<h3 data-number="1.10.1" id="基本工作流程"><span
+class="header-section-number">1.10.1</span> 基本工作流程</h3>
+<ol type="1">
+<li>发送 <code>CMD_HI</code> 确认设备连接</li>
+<li>发送 <code>CMD_ACTION_HOMING</code> 执行归零</li>
+<li>通过 <code>CMD_POLL</code> 监控归零状态直到完成</li>
+<li>执行其他动作命令 (扫描、移动等)</li>
+<li>通过 <code>CMD_POLL</code> 持续监控状态</li>
+</ol>
+<h3 data-number="1.10.2" id="扫描流程"><span
+class="header-section-number">1.10.2</span> 扫描流程</h3>
+<ol type="1">
+<li>确保已归零 (<code>homed=1</code>)</li>
+<li>发送 <code>CMD_ACTION_SCAN</code> 启动扫描</li>
+<li>通过 <code>CMD_POLL</code> 监控扫描进度</li>
+<li>扫描完成后使用 <code>CMD_ACTION_QUERY_DATA</code> 获取数据</li>
+</ol>
+<hr />
+<h2 data-number="1.11" id="通信帧示例"><span
+class="header-section-number">1.11</span> 通信帧示例</h2>
+<h3 data-number="1.11.1" id="简单命令示例"><span
+class="header-section-number">1.11.1</span> 简单命令示例</h3>
+<h4 data-number="1.11.1.1" id="发送poll命令"><span
+class="header-section-number">1.11.1.1</span> 发送POLL命令</h4>
+<div class="sourceCode" id="cb10"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>发送<span class="op">:</span> <span class="op">[</span><span class="bn">0x21</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x01</span><span class="op">]</span> <span class="op">[</span><span class="bn">0xC</span><span class="er">RC</span><span class="op">]</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>接收<span class="op">:</span> <span class="op">[</span><span class="bn">0x21</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x7C</span><span class="op">]</span> <span class="op">[</span>a<span class="op">:</span><span class="dv">0</span><span class="op">,</span>s<span class="op">:</span>IDLE<span class="op">-</span>null<span class="op">,</span>m<span class="op">:</span><span class="dv">0</span><span class="op">-</span><span class="dv">0</span><span class="op">]</span> <span class="op">[</span><span class="bn">0xC</span><span class="er">RC</span><span class="op">]</span></span></code></pre></div>
+<h4 data-number="1.11.1.2" id="发送hi命令"><span
+class="header-section-number">1.11.1.2</span> 发送HI命令</h4>
+<div class="sourceCode" id="cb11"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>发送<span class="op">:</span> <span class="op">[</span><span class="bn">0x21</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x02</span><span class="op">]</span> <span class="op">[</span><span class="bn">0xC</span><span class="er">RC</span><span class="op">]</span>  </span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>接收<span class="op">:</span> <span class="op">[</span><span class="bn">0x21</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x7C</span><span class="op">]</span> <span class="op">[</span>ver<span class="op">:</span>v0<span class="fl">.1</span><span class="er">.1</span><span class="op">~</span><span class="dv">1234567890</span><span class="er">abcdef12345678</span><span class="op">]</span> <span class="op">[</span><span class="bn">0xC</span><span class="er">RC</span><span class="op">]</span></span></code></pre></div>
+<h4 data-number="1.11.1.3" id="错误响应示例"><span
+class="header-section-number">1.11.1.3</span> 错误响应示例</h4>
+<div class="sourceCode" id="cb12"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="pp"># </span><span class="er">CRC错误</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>发送<span class="op">:</span> <span class="op">[</span><span class="bn">0x21</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x01</span><span class="op">]</span> <span class="op">[</span><span class="bn">0xFF</span><span class="op">]</span>  # 错误的CRC</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>接收<span class="op">:</span> <span class="op">[</span><span class="bn">0x21</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x3F</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x7C</span><span class="op">]</span> <span class="op">[</span>crc error<span class="op">]</span> <span class="op">[</span><span class="bn">0xC</span><span class="er">RC</span><span class="op">]</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="pp"># </span><span class="er">未知命令</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>发送<span class="op">:</span> <span class="op">[</span><span class="bn">0x21</span><span class="op">]</span> <span class="op">[</span><span class="bn">0xFF</span><span class="op">]</span> <span class="op">[</span><span class="bn">0xC</span><span class="er">RC</span><span class="op">]</span>  # 无效命令</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>接收<span class="op">:</span> <span class="op">[</span><span class="bn">0x21</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x3F</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x7C</span><span class="op">]</span> <span class="op">[?</span> bad cmd<span class="op">:</span> <span class="op">(</span><span class="bn">0xFF</span><span class="op">)]</span> <span class="op">[</span><span class="bn">0xC</span><span class="er">RC</span><span class="op">]</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="pp"># </span><span class="er">地址错误</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>发送<span class="op">:</span> <span class="op">[</span><span class="bn">0x22</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x01</span><span class="op">]</span> <span class="op">[</span><span class="bn">0xC</span><span class="er">RC</span><span class="op">]</span>  # 错误地址</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>接收<span class="op">:</span> <span class="op">[</span><span class="bn">0x21</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x3F</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x7C</span><span class="op">]</span> <span class="op">[?</span> my addr should<span class="op">:</span> <span class="bn">0x21</span><span class="op">,</span> but got<span class="op">:</span> <span class="bn">0x22</span><span class="op">,</span> len<span class="op">(</span><span class="dv">3</span><span class="op">)]</span> <span class="op">[</span><span class="bn">0xC</span><span class="er">RC</span><span class="op">]</span></span></code></pre></div>
+<h3 data-number="1.11.2" id="复杂命令示例"><span
+class="header-section-number">1.11.2</span> 复杂命令示例</h3>
+<h4 data-number="1.11.2.1"
+id="发送移动命令-水平电机速度1000步秒持续2秒"><span
+class="header-section-number">1.11.2.1</span> 发送移动命令
+(水平电机，速度1000步/秒，持续2秒)</h4>
+<div class="sourceCode" id="cb13"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>发送<span class="op">:</span> <span class="op">[</span><span class="bn">0x21</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x41</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x00</span><span class="op">]</span> <span class="op">[</span><span class="bn">0xE8</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x03</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x00</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x00</span><span class="op">]</span> <span class="op">[</span><span class="bn">0xD0</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x07</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x00</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x00</span><span class="op">]</span> <span class="op">[</span><span class="bn">0xC</span><span class="er">RC</span><span class="op">]</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>      <span class="op">|----</span> <span class="op">|----</span> <span class="op">|----</span> <span class="op">|----------</span>velocity<span class="op">---------|</span>  <span class="op">|-------</span>duration<span class="op">-------|</span>  <span class="op">|</span>CRC<span class="op">|</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>      ADDR  CMD   motor<span class="op">=</span><span class="dv">0</span>  <span class="dv">1000</span> <span class="op">(</span><span class="bn">0x03E8</span> → E8<span class="op">,</span><span class="bn">03</span><span class="op">,</span><span class="bn">00</span><span class="op">,</span><span class="bn">00</span><span class="op">)</span>  <span class="dv">2000</span><span class="er">ms</span> <span class="op">(</span><span class="bn">0x07D0</span> → D0<span class="op">,</span><span class="bn">07</span><span class="op">,</span><span class="bn">00</span><span class="op">,</span><span class="bn">00</span><span class="op">)</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>      </span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>接收<span class="op">:</span> <span class="op">[</span><span class="bn">0x21</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x7C</span><span class="op">]</span> <span class="op">[</span>move_dur<span class="op">:</span><span class="dv">0</span><span class="er">.0</span><span class="op">,</span><span class="dv">1000</span><span class="op">,</span><span class="dv">2000</span><span class="op">]</span> <span class="op">[</span><span class="bn">0xC</span><span class="er">RC</span><span class="op">]</span></span></code></pre></div>
+<h4 data-number="1.11.2.2" id="发送扫描命令-速度500步秒持续5秒"><span
+class="header-section-number">1.11.2.2</span> 发送扫描命令
+(速度500步/秒，持续5秒)</h4>
+<div class="sourceCode" id="cb14"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>发送<span class="op">:</span> <span class="op">[</span><span class="bn">0x21</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x44</span><span class="op">]</span> <span class="op">[</span><span class="bn">0xF4</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x01</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x00</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x00</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x88</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x13</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x00</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x00</span><span class="op">]</span> <span class="op">[</span><span class="bn">0xC</span><span class="er">RC</span><span class="op">]</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>      <span class="op">|----</span> <span class="op">|----</span> <span class="op">|----------</span>velocity<span class="op">---------|</span>  <span class="op">|-------</span>duration<span class="op">-------|</span>  <span class="op">|</span>CRC<span class="op">|</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>      ADDR  CMD   <span class="dv">500</span> <span class="op">(</span><span class="bn">0x01F4</span> → F4<span class="op">,</span><span class="bn">01</span><span class="op">,</span><span class="bn">00</span><span class="op">,</span><span class="bn">00</span><span class="op">)</span>    <span class="dv">5000</span><span class="er">ms</span> <span class="op">(</span><span class="bn">0x1388</span> → <span class="dv">88</span><span class="op">,</span><span class="dv">13</span><span class="op">,</span><span class="bn">00</span><span class="op">,</span><span class="bn">00</span><span class="op">)</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>      </span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>接收<span class="op">:</span> <span class="op">[</span><span class="bn">0x21</span><span class="op">]</span> <span class="op">[</span><span class="bn">0x7C</span><span class="op">]</span> <span class="op">[</span>scan<span class="op">:</span><span class="dv">0</span><span class="op">,</span><span class="dv">500</span><span class="op">,</span><span class="dv">5000</span><span class="op">]</span> <span class="op">[</span><span class="bn">0xC</span><span class="er">RC</span><span class="op">]</span></span></code></pre></div>
+<h3 data-number="1.11.3" id="数据类型说明"><span
+class="header-section-number">1.11.3</span> 数据类型说明</h3>
+<ul>
+<li><strong>int32</strong>: 4字节有符号整数，小端序</li>
+<li><strong>uint32</strong>: 4字节无符号整数，小端序<br />
+</li>
+<li><strong>uint8</strong>: 1字节无符号整数</li>
+<li><strong>CRC</strong>: 1字节CRC-8校验值</li>
+</ul>
+<h3 data-number="1.11.4" id="crc-8-算法详细说明"><span
+class="header-section-number">1.11.4</span> CRC-8 算法详细说明</h3>
+<p>采用8位CRC校验算法，参数如下：</p>
+<ul>
+<li><strong>多项式</strong>: x²+x¹+x⁰ = 0x07</li>
+<li><strong>初始值</strong>: 0x00</li>
+<li><strong>异或输出</strong>: 0x00<br />
+</li>
+<li><strong>输入反转</strong>: True (refin=True)</li>
+<li><strong>输出反转</strong>: False (refout=False)</li>
+</ul>
+<p><strong>Python实现示例</strong>:</p>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> anycrc</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>crc8 <span class="op">=</span> anycrc.CRC(width<span class="op">=</span><span class="dv">8</span>, poly<span class="op">=</span><span class="bn">0x07</span>, init<span class="op">=</span><span class="bn">0x00</span>, xorout<span class="op">=</span><span class="bn">0x00</span>, refin<span class="op">=</span><span class="va">True</span>, refout<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>crc_value <span class="op">=</span> crc8.calc(data_bytes)</span></code></pre></div>
+<p><strong>CRC计算示例</strong>:</p>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 计算POLL命令的CRC</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> [<span class="bn">0x21</span>, <span class="bn">0x01</span>]  <span class="co"># 地址 + 命令</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>crc8 <span class="op">=</span> anycrc.CRC(width<span class="op">=</span><span class="dv">8</span>, poly<span class="op">=</span><span class="bn">0x07</span>, init<span class="op">=</span><span class="bn">0x00</span>, xorout<span class="op">=</span><span class="bn">0x00</span>, refin<span class="op">=</span><span class="va">True</span>, refout<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>crc_value <span class="op">=</span> crc8.calc(data)</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="co"># 完整帧: [0x21, 0x01, crc_value]</span></span></code></pre></div>
+<h3 data-number="1.11.5" id="字节序说明"><span
+class="header-section-number">1.11.5</span> 字节序说明</h3>
+<p>所有多字节数据采用<strong>小端序 (Little Endian)</strong>格式：</p>
+<ul>
+<li>低位字节在前，高位字节在后</li>
+<li>例如：1000 (0x03E8) → [0xE8] [0x03] [0x00] [0x00]</li>
+</ul>
+</body>
+</html>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="WlkDatepicker" parent="android:Widget.DatePicker">
+        <item name="android:headerBackground">@color/primaryColor</item>
+    </style>
+
+    <style name="Theme.WlkAppFullscreen" parent="android:Theme.Material.Light.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@drawable/splash_img</item>
+        <item name="android:colorPrimary">@color/primaryColor</item>
+        <item name="android:datePickerStyle">@style/WlkDatepicker</item>
+    </style>
+
+    <style name="Theme.WlkFullscreen" parent="android:Theme.Material.Light.NoActionBar.Fullscreen">
+<!--        <item name="android:windowBackground">@color/primaryColor</item>-->
+        <item name="android:colorPrimary">@color/primaryColor</item>
+        <item name="android:datePickerStyle">@style/WlkDatepicker</item>
+    </style>
+</resources>

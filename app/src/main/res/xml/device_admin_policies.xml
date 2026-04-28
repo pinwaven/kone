@@ -1,0 +1,7 @@
+<device-admin>
+    <uses-policies>
+        <force-lock />   <!-- 允许锁定设备 -->
+        <wipe-data />    <!-- 允许恢复出厂设置 -->
+        <reset-password /> <!-- 允许重置密码 -->
+    </uses-policies>
+</device-admin>

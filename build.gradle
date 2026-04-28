@@ -1,0 +1,51 @@
+buildscript {
+    ext {
+        KEY_ALIAS = "app"
+        STORE_PASSWORD = "app1424"
+        KEY_PASSWORD = "app1424"
+        compile_sdk_version = 35
+        target_sdk_version = 31
+        min_version = 28
+        compose_compiler_version = '1.4.7'
+        compose_version = '1.7.8'
+        compose_material3_version = '1.3.2'
+        lifecycle_version = '2.8.7'
+        retrofit_version = '2.9.0'
+        logging_interceptor_version = '4.7.2'
+        coroutines_version = '1.4.1'
+        systemuicontroller_version = '0.23.1'
+        lifecylektx_version = '2.8.7'
+        compose_activity_version = '1.10.1'
+        compose_navigation_version = '2.8.9'
+        compose_viewmodel_version = '2.8.7'
+        compose_webview_version = '0.24.1-alpha'
+        room_version = '2.6.1'
+    }
+
+    repositories {
+        // 优先使用阿里云镜像
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url 'https://maven.aliyun.com/nexus/content/groups/public/' }
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.9.1' //7.0.0"
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.7.10'//1.5.21
+        classpath "org.jetbrains.kotlin:kotlin-serialization:1.7.10"
+    }
+}
+
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+plugins {
+    id 'com.android.application' version '8.9.1' apply false
+    id 'com.android.library' version '8.9.1' apply false
+    id 'org.jetbrains.kotlin.android' version '1.8.21' apply false
+}
+
+task clean(type: Delete) {
+    delete rootProject.getLayout().getBuildDirectory()
+}

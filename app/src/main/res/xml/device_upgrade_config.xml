@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 内部存储的应用私有目录 -->
+    <files-path
+        name="internal_download"
+        path="download/" />
+    <!-- 外部存储的应用私有目录 -->
+    <external-files-path
+        name="external_download"
+        path="Download/" />
+    <!-- 外部存储的公共下载目录 (Android 11+ 需要特殊权限) -->
+    <external-path
+        name="downloads"
+        path="Download/" />
+    <!-- 缓存目录 -->
+    <cache-path
+        name="cache"
+        path="." />
+</paths>
