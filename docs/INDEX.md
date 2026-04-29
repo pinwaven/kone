@@ -8,4 +8,5 @@ Welcome to the Kone (Kino-One) project documentation.
 - [Chip Scanning Logic](CHIP_SCANNING_LOGIC.md) - Physical and logical flow of chip scanning and data interpretation.
 - [Design Relationship](DESIGN_RELATIONSHIP.md) - Relationship between Python prototypes and production code.
 - [GUI Flow](GUI_FLOW.md) - Application navigation and user interface structure.
+- [Nano Flow](NANO_FLOW.md) - End-to-end integration with the Waven Nano AI platform.
 
