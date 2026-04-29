@@ -113,6 +113,12 @@ fun SettingMainBody(
                     painter = painterResource(id = R.mipmap.xtxx_icon),
                     onClick = { navController.navigate(RouteConfig.SYS_FUN_INFO) }
                 )
+                AppMenuCardItem(
+                    navController = navController,
+                    label = stringResource(id = R.string.sys_fun_api_test_menu),
+                    painter = painterResource(id = R.mipmap.tjsjk_fwz_icon),
+                    onClick = { navController.navigate(RouteConfig.SYS_FUN_API_TEST) }
+                )
                 // TODO 简化信息
 //                AppMenuCardItem(
 //                    navController = navController,

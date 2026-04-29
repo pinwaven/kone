@@ -42,8 +42,20 @@ import poct.device.app.serial.v2.ctl.CtlSerialMessageEventV2
 import poct.device.app.state.ActionState
 import poct.device.app.state.ViewState
 import poct.device.app.thirdparty.FrosApi
+import poct.device.app.thirdparty.NanoApi
 import poct.device.app.thirdparty.SbEdgeFunc
+import poct.device.app.thirdparty.model.nano.NanoBioAgeProfile
+import poct.device.app.thirdparty.model.nano.NanoBiomarkersReq
+import poct.device.app.thirdparty.model.nano.NanoBiomarkersResp
+import poct.device.app.thirdparty.model.nano.NanoChipConfig
+import poct.device.app.thirdparty.model.nano.NanoChipResp
+import poct.device.app.thirdparty.model.nano.NanoKinoResultReq
+import poct.device.app.thirdparty.model.sbedge.resp.BaaResult
 import poct.device.app.thirdparty.model.sbedge.resp.BaaResultResp
+import poct.device.app.thirdparty.model.sbedge.resp.BioAgeProfile
+import poct.device.app.bean.card.Card
+import poct.device.app.bean.card.CardBatch
+import poct.device.app.bean.card.CardInfoBean
 import poct.device.app.utils.app.AppCardUtils
 import poct.device.app.utils.app.AppDictUtils
 import poct.device.app.utils.app.AppExperimentUtils
@@ -122,6 +134,15 @@ class WorkMainViewModel : ViewModel() {
 
     // 试剂卡配置
     private var cardConfig: CardConfig? = null
+
+    // Nano flow: declared biomarker outputs for the scanned chip (from
+    // /api/kino-chip). Drives test_data extraction at upload time.
+    private var nanoBiomarkerKeys: List<String>? = null
+
+    // Nano flow: latest /api/biomarkers response — drives the simulator-style
+    // result overlay (Bio Age / Sub-Ages / per-biomarker tabs).
+    val nanoReport = MutableStateFlow<NanoBiomarkersResp?>(null)
+    val nanoChipKeys = MutableStateFlow<List<String>?>(null)
 
     private var jobCmdSwitch: Job? = null
 
@@ -616,50 +637,99 @@ class WorkMainViewModel : ViewModel() {
             }
 
             withContext(Dispatchers.IO) {
-                // 自动上传数据到服务器
-                FrosApi.uploadPatientReportDataToServer(bean.value)
-
-                if (bean.value.type == CaseBean.TYPE_3LJ_BIOAGE_L1 || bean.value.type == CaseBean.TYPE_BIOAGE_CRP) {
-                    while (true) {
-                        val baaResultResp: BaaResultResp? =
-                            SbEdgeFunc.baaResult(bean.value.qrCode, bean.value.patientId)
-                        if (baaResultResp == null) {
-                            delay(500)
-                            continue
-                        } else {
-                            val resultList = bean.value.resultList
-                            val baaResult = baaResultResp.detail!!
-
-                            resultList[0].result = baaResult.bioAgeProfile.bioAge.toString()
-                            resultList[0].refer = baaResult.bioAgeProfile.chronoAge.toString()
-
-                            var assessResultStr = "green|正常"
-                            if (baaResult.bioAgeProfile.ageDifference > 1) {
-                                assessResultStr = "red|衰老加速"
-                            } else if (baaResult.bioAgeProfile.ageDifference < -1) {
-                                assessResultStr = "green|衰老减速"
+                if (isNanoFlow()) {
+                    // Nano flow: POST measured biomarkers to nano /api/biomarkers
+                    // which returns bioage_profile inline (no polling needed),
+                    // then POST /api/kino-result to mark the chip used.
+                    val testData = extractTestData(nanoBiomarkerKeys, bean.value.resultList)
+                    val biomarkersResp = NanoApi.postBiomarkers(
+                        NanoBiomarkersReq(
+                            openid = bean.value.patientId,
+                            testType = "kino_chip",
+                            testData = testData,
+                            kinoDeviceId = NanoApi.deviceSerial().ifEmpty { null },
+                        )
+                    )
+                    nanoReport.value = biomarkersResp
+                    val nanoProfile = biomarkersResp?.bioageProfile
+                    if (nanoProfile != null) {
+                        val resultList = bean.value.resultList
+                        if (resultList.isNotEmpty()) {
+                            resultList[0].result = nanoProfile.bioAge.toString()
+                            resultList[0].refer = nanoProfile.chronoAge.toString()
+                            resultList[0].radioValue = when {
+                                nanoProfile.ageDifference > 1  -> "red|衰老加速"
+                                nanoProfile.ageDifference < -1 -> "green|衰老减速"
+                                else                           -> "green|正常"
                             }
-                            resultList[0].radioValue = assessResultStr
-
-                            onBeanUpdate(
-                                bean.value.copy(
-                                    workResult = Json.encodeToString(resultList),
-                                    baaResult = baaResult,
-                                    baaAssets = baaResultResp.assets!!
-                                )
+                        }
+                        onBeanUpdate(
+                            bean.value.copy(
+                                workResult = Json.encodeToString(resultList),
+                                baaResult = nanoProfile.toBaaResult(),
                             )
-                            break
+                        )
+                    }
+                    checkStep.value = 95
+                    progress.value = 95F
+                    saveCase(bean.value)
+                    NanoApi.postKinoResult(
+                        NanoKinoResultReq(
+                            chipId = bean.value.qrCode,
+                            data = mapOf(
+                                "biomarkers"     to (biomarkersResp?.biomarkers ?: testData),
+                                "bioage_profile" to nanoProfile,
+                            ),
+                            bioAge = nanoProfile?.bioAge,
+                            kinoDeviceId = NanoApi.deviceSerial().ifEmpty { null },
+                        )
+                    )
+                } else {
+                    // 自动上传数据到服务器
+                    FrosApi.uploadPatientReportDataToServer(bean.value)
+
+                    if (bean.value.type == CaseBean.TYPE_3LJ_BIOAGE_L1 || bean.value.type == CaseBean.TYPE_BIOAGE_CRP) {
+                        while (true) {
+                            val baaResultResp: BaaResultResp? =
+                                SbEdgeFunc.baaResult(bean.value.qrCode, bean.value.patientId)
+                            if (baaResultResp == null) {
+                                delay(500)
+                                continue
+                            } else {
+                                val resultList = bean.value.resultList
+                                val baaResult = baaResultResp.detail!!
+
+                                resultList[0].result = baaResult.bioAgeProfile.bioAge.toString()
+                                resultList[0].refer = baaResult.bioAgeProfile.chronoAge.toString()
+
+                                var assessResultStr = "green|正常"
+                                if (baaResult.bioAgeProfile.ageDifference > 1) {
+                                    assessResultStr = "red|衰老加速"
+                                } else if (baaResult.bioAgeProfile.ageDifference < -1) {
+                                    assessResultStr = "green|衰老减速"
+                                }
+                                resultList[0].radioValue = assessResultStr
+
+                                onBeanUpdate(
+                                    bean.value.copy(
+                                        workResult = Json.encodeToString(resultList),
+                                        baaResult = baaResult,
+                                        baaAssets = baaResultResp.assets!!
+                                    )
+                                )
+                                break
+                            }
                         }
                     }
+
+                    checkStep.value = 95
+                    progress.value = 95F
+
+                    saveCase(bean.value)
+
+                    // 更新试剂卡状态
+                    SbEdgeFunc.updateCardStatus(bean.value.qrCode, CardStatus.SUCCESS.statusVal)
                 }
-
-                checkStep.value = 95
-                progress.value = 95F
-
-                saveCase(bean.value)
-
-                // 更新试剂卡状态
-                SbEdgeFunc.updateCardStatus(bean.value.qrCode, CardStatus.SUCCESS.statusVal)
             }
 
             checkStep.value = 100
@@ -1492,6 +1562,14 @@ class WorkMainViewModel : ViewModel() {
                 }
                 Timber.w("++++++++++${cardCode}")
 
+                // Nano flow short-circuits the supabase + fros-api dance.
+                // The chip is looked up on the Waven Nano backend, which returns
+                // both the linked user and the physical scan config in one call.
+                if (isNanoFlow()) {
+                    handleNanoChipScan(cardCode)
+                    return@launch
+                }
+
 //                // 先读取本地
 //                if (AppParams.curUser.role != User.ROLE_DEV) {
 //                    val case: Case? = withContext(Dispatchers.IO) {
@@ -1693,6 +1771,156 @@ class WorkMainViewModel : ViewModel() {
                     onClearInteraction()
                 }
             }
+        }
+    }
+
+    // ── Nano flow ───────────────────────────────────────────────────────────
+
+    private fun isNanoFlow(): Boolean = sysConfig.value.flow == NanoApi.FLOW_NANO
+
+    /** Map a chip's declared biomarker_keys to the kone TYPE_* used by genResult. */
+    private fun nanoTypeFor(biomarkerKeys: List<String>?): String? {
+        val keys = biomarkerKeys?.toSet() ?: return null
+        return when {
+            keys == setOf("hsCRP") -> CaseBean.TYPE_BIOAGE_CRP
+            else -> null  // unknown panel — caller must handle
+        }
+    }
+
+    /** Map nano chip_config (server-authoritative scan params) to kone CardConfig. */
+    private fun nanoChipConfigToCardConfig(c: NanoChipConfig): CardConfig = CardConfig(
+        scanPPMM = c.scanPpmm,
+        topList  = c.topList.map {
+            poct.device.app.thirdparty.model.sbedge.resp.CardConfigTop(
+                id = it.id ?: "", start = it.start, end = it.end,
+                ctrl = it.ctrl ?: "", name = it.name ?: ""
+            )
+        },
+        varList  = c.varList.map {
+            poct.device.app.thirdparty.model.sbedge.resp.CardConfigVar(
+                id = it.id ?: "", type = "", start = it.start, end = it.end,
+                x0 = it.x0, x1 = it.x1, x2 = 0.0, x3 = 0.0, x4 = 0.0
+            )
+        },
+        ft0 = c.ft0, xt1 = c.xt1, ft1 = c.ft1,
+        scope = c.scope, typeScore = c.typeScore,
+        cAvg = c.cAvg, cStd = c.cStd, cMin = c.cMin, cMax = c.cMax,
+        cutOff1 = c.cutOff1, cutOff2 = c.cutOff2, cutOff3 = c.cutOff3, cutOff4 = c.cutOff4,
+        cutOff5 = c.cutOff5, cutOff6 = c.cutOff6, cutOff7 = c.cutOff7, cutOff8 = c.cutOff8,
+        cutOffMax = c.cutOffMax,
+        noise1 = c.noise1, noise2 = c.noise2, noise3 = c.noise3, noise4 = c.noise4, noise5 = c.noise5,
+    )
+
+    /** Adapt nano BioAge profile into the legacy BaaResult shape so the
+     *  existing report UI keeps rendering until the simulator overlay is ported. */
+    private fun NanoBioAgeProfile.toBaaResult(): BaaResult = BaaResult(
+        bioAgeProfile = BioAgeProfile(
+            chronoAge     = chronoAge,
+            bioAge        = bioAge,
+            ageDifference = ageDifference,
+            scores = mapOf(
+                "Resilience"    to (scores?.resilience    ?: 0.0),
+                "Cellular"      to (scores?.cellular      ?: 0.0),
+                "Metabolic"     to (scores?.metabolic     ?: 0.0),
+                "MicroVascular" to (scores?.microVascular ?: 0.0),
+            )
+        )
+    )
+
+    /** Pluck named biomarker values out of the post-scan result list, filtered
+     *  to only the keys this chip is expected to produce. */
+    private fun extractTestData(
+        biomarkerKeys: List<String>?,
+        resultList: List<CaseResult>
+    ): Map<String, Double> {
+        val keys = biomarkerKeys?.toSet() ?: return emptyMap()
+        return resultList
+            .filter { it.name in keys }
+            .mapNotNull { r -> r.result.toDoubleOrNull()?.let { r.name to it } }
+            .toMap()
+    }
+
+    /** Nano-flow chip lookup: replaces `SbEdgeFunc.getCardInfo` +
+     *  `FrosApi.getPatientCaseReport` with a single `NanoApi.getChip`. */
+    private suspend fun handleNanoChipScan(cardCode: String) {
+        val chipResp: NanoChipResp? = NanoApi.getChip(cardCode)
+        if (chipResp == null) {
+            actionState.value = ActionState(
+                event = EVT_DEV_ERROR_NETWORK,
+                msg = App.getContext().getString(R.string.wlan_not_connect)
+            )
+            return
+        }
+        if (!chipResp.found) {
+            actionState.value = ActionState(
+                event = EVT_DEV_ERROR,
+                msg = App.getContext().getString(R.string.report_card_not_bind)
+            )
+            return
+        }
+        if (chipResp.used) {
+            actionState.value = ActionState(
+                event = EVT_DEV_ERROR,
+                msg = App.getContext().getString(R.string.report_card_undefined)
+            )
+            return
+        }
+        val nanoCardConfig = chipResp.chipConfig
+        if (nanoCardConfig == null) {
+            actionState.value = ActionState(
+                event = EVT_DEV_ERROR,
+                msg = App.getContext().getString(R.string.report_card_undefined)
+            )
+            return
+        }
+        val type = nanoTypeFor(chipResp.biomarkerKeys)
+        if (type == null) {
+            actionState.value = ActionState(
+                event = EVT_DEV_ERROR,
+                msg = App.getContext().getString(R.string.work_read_chip_error2)
+            )
+            return
+        }
+
+        val cardBatchCode = AppTypeUtils.findCardBatchCode(cardCode)
+        val cardId        = AppTypeUtils.findCardId(cardCode)
+        val cardInfo = CardInfoBean(
+            card = Card(code = cardCode, status = CardStatus.ACTIVE.statusVal),
+            cardBatch = CardBatch(
+                code = cardBatchCode,
+                guideVideo = chipResp.guideVideo,
+                guideText  = chipResp.guideText,
+            ),
+            cardConfig = nanoChipConfigToCardConfig(nanoCardConfig),
+        )
+
+        nanoBiomarkerKeys = chipResp.biomarkerKeys
+        nanoChipKeys.value = chipResp.biomarkerKeys
+        nanoReport.value = null
+
+        onBeanUpdate(
+            bean.value.copy(
+                reagentId = cardBatchCode,
+                type      = type,
+                qrCode    = cardCode,
+                caseId    = cardId,
+                cardInfo  = cardInfo,
+                patientId = chipResp.userId ?: "",
+                name      = chipResp.nickname ?: bean.value.name,
+                birthday  = chipResp.birthDate ?: bean.value.birthday,
+                gender    = if (chipResp.gender == "female") 2 else 1,
+            )
+        )
+
+        cardConfig = bean.value.cardInfo.cardConfig
+        curCardConfig.value = cardConfig!!
+        showCutOff2Time.value = curCardConfig.value.cutOff2 > 0
+
+        val workFlowTmp = genWorkFlowV2()
+        if (workFlowTmp != null) {
+            workFlow = workFlowTmp
+            doNext()
+            onClearInteraction()
         }
     }
 

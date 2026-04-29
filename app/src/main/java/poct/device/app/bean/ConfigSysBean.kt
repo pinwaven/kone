@@ -12,6 +12,11 @@ data class ConfigSysBean(
     var sf: String = "", // SF/CRP扫码类型
     var slj: String = "", // 4LJ扫码类型
 
+    // Nano AI flow toggle. Empty / "clinical" → existing fros-api + supabase
+    // path. "nano" → POST chip-scan results to the Waven Nano backend instead.
+    var flow: String = "",
+    var nanoDeviceId: String = "",  // matches nano kino_devices.serial_number
+
 ) : ConfigBean {
     companion object {
         const val PREFIX = "sys_"

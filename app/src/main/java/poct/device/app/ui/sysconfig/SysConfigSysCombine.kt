@@ -31,6 +31,7 @@ import poct.device.app.component.AppBottomBar
 import poct.device.app.component.AppConfirm
 import poct.device.app.component.AppFieldWrapper
 import poct.device.app.component.AppFilledButton
+import poct.device.app.component.AppTextField
 import poct.device.app.component.AppOutlinedButton
 import poct.device.app.component.AppPreviewWrapper
 import poct.device.app.component.AppRadioGroup
@@ -152,6 +153,11 @@ val SysConfigSysCombineLangOptions = mapOf(
     "en" to App.getContext().getString(R.string.english)
 )
 
+val SysConfigSysCombineFlowOptions = mapOf(
+    "clinical" to App.getContext().getString(R.string.sys_config_sys_f_flow_clinical),
+    "nano"     to App.getContext().getString(R.string.sys_config_sys_f_flow_nano)
+)
+
 @Composable
 private fun SysConfigSysCombineForm(
     bean: ConfigSysBean,
@@ -207,6 +213,30 @@ private fun SysConfigSysCombineForm(
                         .height(0.5.dp)
                         .background(sepColor)
                 )
+            }
+
+            // ── Nano AI flow ────────────────────────────────────────────────
+            AppFieldWrapper(
+                text = stringResource(id = R.string.sys_config_sys_f_flow),
+            ) {
+                AppRadioGroup(
+                    value = bean.flow.ifEmpty { "clinical" },
+                    readOnly = readOnly,
+                    options = SysConfigSysCombineFlowOptions,
+                    gap = 0.dp,
+                    onValueChange = { onBeanUpdate(bean.copy(flow = it)) }
+                )
+            }
+            if (bean.flow == "nano") {
+                AppFieldWrapper(
+                    text = stringResource(id = R.string.sys_config_sys_f_nano_device_id),
+                ) {
+                    AppTextField(
+                        value = bean.nanoDeviceId,
+                        readOnly = readOnly,
+                        onValueChange = { onBeanUpdate(bean.copy(nanoDeviceId = it)) }
+                    )
+                }
             }
         }
     }

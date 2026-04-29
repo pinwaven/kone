@@ -28,15 +28,44 @@ After the physical scan is complete, the raw data must be pulled from the device
 ## 4. Processing: Signal Analysis
 The raw binary data is converted into meaningful readings.
 
-1.  **Parsing:** `AppCardUtils.parseData(queryResult)` converts the binary buffer into a structured `ScanData` object, extracting the raw signal points.
+### Raw Data Format (Binary)
+The raw data received from the hardware is a binary stream with a fixed-size header followed by a variable-length ADC payload.
+
+**Header Structure (10 Bytes, Little Endian):**
+| Offset | Field | Type | Description |
+| :--- | :--- | :--- | :--- |
+| 0 | `dataLen` | `uint16` | Number of 13-bit ADC raw data points following. |
+| 2 | `laserCurr` | `uint16` | 12-bit ADC value representing the laser current. |
+| 4 | `fixed5a` | `uint8` | Sync byte: must be **`0x5A`**. |
+| 5 | `dataBias` | `uint16` | ADC baseline noise/bias for the signal data. |
+| 7 | `laserCurrBias`| `uint16` | ADC baseline bias for the laser current. |
+| 9 | `fixedA5` | `uint8` | Sync byte: must be **`0xA5`**. |
+
+**Data Payload:**
+- Followed by `dataLen` points of **2-byte `uint16`** values representing 13-bit ADC samples.
+- **Normalization:** The system subtracts `dataBias` from each raw sample to produce the `dataBiased` signal used for analysis.
+
+### Processing Steps
+1.  **Parsing:** `AppCardUtils.parseData(queryResult)` converts the binary buffer into a structured `ScanData` object.
 2.  **Conversion:** `convertToPointListV2` maps these points into a list of `CasePoint` objects (X/Y coordinates).
-3.  **Peak Calculation:** `AppWorkCalcUtils.calculatePeakArea(...)` uses the `start` and `end` positions from the `top_list` to calculate the area under specific peaks (e.g., T1, T2, C).
+3.  **Peak Calculation:** `AppWorkCalcUtils.calculatePeakArea(...)` calculates the area under specific peaks (T1, T2, C) using positions from `top_list`.
+    - It identifies a local baseline and integrates only the signal **above** that baseline.
 
-## 5. Interpretation: Result Generation
-The calculated peak areas are converted into clinical results.
+## 5. Interpretation: hsCRP Calculation
+The calculated peak areas are converted into clinical concentrations (e.g., hsCRP) using a ratio-based polynomial calibration.
 
-- **Calculation:** `AppCardUtils.genResultForBACRP(...)` (or other type-specific functions) applies the `var_list` calibration logic.
-- **Upload:** The results are uploaded back to the server via `FrosApi.uploadPatientReportDataToServer(bean)`.
+### Calculation Steps
+1.  **Ratio Generation:**
+    A normalized ratio is calculated between the Test line (T) and Control line (C):
+    $$Value = \frac{Area_{T}}{Area_{C}} \times 1000$$
+
+2.  **Polynomial Calibration:**
+    The system selects the appropriate coefficients ($x_0 \dots x_4$) from the `var_list` based on the calculated $Value$ and applies a 4th-degree polynomial:
+    $$Result = x_0 + (x_1 \cdot Value) + (x_2 \cdot Value^2) + (x_3 \cdot Value^3) + (x_4 \cdot Value^4)$$
+
+3.  **Whole Blood Correction:**
+    If the sample is whole blood (`caseType == 2`), the result is multiplied by the `typeScore` (whole blood coefficient):
+    $$Final hsCRP = Result \times typeScore$$
 
 ## Summary of Key Files
 | File | Responsibility |

@@ -79,6 +79,7 @@ import poct.device.app.ui.sysconfig.SysConfigSys
 import poct.device.app.ui.sysconfig.SysConfigSysCombine
 import poct.device.app.ui.sysconfig.SysConfigWlan
 import poct.device.app.ui.sysfun.SysFunAdjust
+import poct.device.app.ui.sysfun.SysFunApiTest
 import poct.device.app.ui.sysfun.SysFunInfo
 import poct.device.app.ui.sysfun.SysFunMain
 import poct.device.app.ui.sysfun.SysFunUser
@@ -629,6 +630,7 @@ fun NavGraphBuilder.sysFunNav(navController: NavController) {
         composable(RouteConfig.SYS_FUN_USER) { SysFunUser(navController = navController) }
         composable(RouteConfig.SYS_FUN_USER_SAVE) { SysFunUserSave(navController = navController) }
         composable(RouteConfig.SYS_FUN_ADJUST) { SysFunAdjust(navController = navController) }
+        composable(RouteConfig.SYS_FUN_API_TEST) { SysFunApiTest(navController = navController) }
     }
 }
 

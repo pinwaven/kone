@@ -34,6 +34,7 @@ object RouteConfig {
     const val SYS_FUN_USER = "$SYS_FUN/user"
     const val SYS_FUN_ADJUST = "$SYS_FUN/adjust"
     const val SYS_FUN_USER_SAVE = "$SYS_FUN/userSave"
+    const val SYS_FUN_API_TEST = "$SYS_FUN/apiTest"
 
     const val WORK_CONFIG = "workConfig"
     const val WORK_CONFIG_MAIN = "$WORK_CONFIG/main"

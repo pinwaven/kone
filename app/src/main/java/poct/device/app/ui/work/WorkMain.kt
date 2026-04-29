@@ -389,15 +389,31 @@ fun WorkMainBody(
                 showTime,
             )
 
-            WorkMainViewModel.ACTION_REPORT1 -> WorkActionReport1Block(
-                bean,
-                onDataDetail,
-                onReportGet,
-                onBeanUpdate,
-                onUpload,
-            )
+            WorkMainViewModel.ACTION_REPORT1 -> {
+                if (sysConfig.value.flow == "nano") {
+                    val nanoReport = viewModel.nanoReport.collectAsState()
+                    val nanoChipKeys = viewModel.nanoChipKeys.collectAsState()
+                    WorkActionNanoReportBlock(bean, nanoReport, nanoChipKeys)
+                } else {
+                    WorkActionReport1Block(
+                        bean,
+                        onDataDetail,
+                        onReportGet,
+                        onBeanUpdate,
+                        onUpload,
+                    )
+                }
+            }
 
-            WorkMainViewModel.ACTION_REPORT2 -> WorkMainActionReport2Block(bean)
+            WorkMainViewModel.ACTION_REPORT2 -> {
+                if (sysConfig.value.flow == "nano") {
+                    val nanoReport = viewModel.nanoReport.collectAsState()
+                    val nanoChipKeys = viewModel.nanoChipKeys.collectAsState()
+                    WorkActionNanoReportBlock(bean, nanoReport, nanoChipKeys)
+                } else {
+                    WorkMainActionReport2Block(bean)
+                }
+            }
         }
     }
 }
