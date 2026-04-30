@@ -35,6 +35,7 @@ object NanoApi {
     const val FLOW_NANO     = "nano"
 
     private val httpUtils = HttpUtils()
+    private val httpUtilsSlow = HttpUtils(readTimeout = 60)
     private val JSON = "application/json".toMediaType()
 
     private suspend fun config(): ConfigSysBean =
@@ -126,18 +127,17 @@ object NanoApi {
         val url = "$base/api/biomarkers"
         try {
             val jsonBody = App.gson.toJson(req)
+            Timber.w("NanoApi.postBiomarkers req=$jsonBody")
             val request = Request.Builder()
                 .url(url)
                 .withAuth(apiToken())
                 .post(jsonBody.toRequestBody(JSON))
                 .build()
-            val body = httpUtils.executeRequest(request)
+            val body = httpUtilsSlow.executeRequest(request)
+            Timber.w("NanoApi.postBiomarkers resp=$body")
             App.gson.fromJson(body, NanoBiomarkersResp::class.java)
-        } catch (e: IOException) {
-            Timber.w(e, "NanoApi.postBiomarkers failed")
-            null
-        } catch (e: JsonParseException) {
-            Timber.w(e, "NanoApi.postBiomarkers parse failed")
+        } catch (e: Exception) {
+            Timber.w(e, "NanoApi.postBiomarkers error: ${e::class.simpleName}")
             null
         }
     }

@@ -642,6 +642,7 @@ class WorkMainViewModel : ViewModel() {
                     // which returns bioage_profile inline (no polling needed),
                     // then POST /api/kino-result to mark the chip used.
                     val testData = extractTestData(nanoBiomarkerKeys, bean.value.resultList)
+                    Timber.w("[nano] patientId=${bean.value.patientId} keys=$nanoBiomarkerKeys testData=$testData")
                     val biomarkersResp = NanoApi.postBiomarkers(
                         NanoBiomarkersReq(
                             openid = bean.value.patientId,
@@ -650,6 +651,7 @@ class WorkMainViewModel : ViewModel() {
                             kinoDeviceId = NanoApi.deviceSerial().ifEmpty { null },
                         )
                     )
+                    Timber.w("[nano] biomarkersResp=${biomarkersResp} profile=${biomarkersResp?.bioageProfile}")
                     nanoReport.value = biomarkersResp
                     val nanoProfile = biomarkersResp?.bioageProfile
                     if (nanoProfile != null) {
@@ -1836,7 +1838,11 @@ class WorkMainViewModel : ViewModel() {
         val keys = biomarkerKeys?.toSet() ?: return emptyMap()
         return resultList
             .filter { it.name in keys }
-            .mapNotNull { r -> r.result.toDoubleOrNull()?.let { r.name to it } }
+            .mapNotNull { r ->
+                r.result.toDoubleOrNull()
+                    ?.takeIf { it.isFinite() }
+                    ?.let { r.name to it }
+            }
             .toMap()
     }
 
