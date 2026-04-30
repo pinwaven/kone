@@ -72,6 +72,7 @@ fun AppTopBar(
     onHome: () -> Unit = { navController.navigate(RouteConfig.HOME_MAIN) },
     onBack: () -> Unit = { navController.popBackStack() },
     onDetail: () -> Unit = {},
+    trailingContent: (@Composable () -> Unit)? = null,
     viewModel: AppTopBarViewModel = viewModel(),
 ) {
     val wifiConnected by viewModel.wifiConnected.collectAsState()
@@ -100,6 +101,7 @@ fun AppTopBar(
             onHome = { onHome() },
             onBack = { onBack() },
             onDetail = { onDetail() },
+            trailingContent = trailingContent,
         )
     }
 }
@@ -204,6 +206,7 @@ private fun AppTopBarTitleBlock(
     onHome: () -> Unit,
     onBack: () -> Unit,
     onDetail: () -> Unit,
+    trailingContent: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier
@@ -271,7 +274,9 @@ private fun AppTopBarTitleBlock(
 
         // 右边操作
         Row(
-            horizontalArrangement = Arrangement.End
+            modifier = Modifier.fillMaxHeight(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
 //            AppTopBarDateTime()
             Spacer(modifier = Modifier.width(40.dp))
@@ -288,6 +293,9 @@ private fun AppTopBarTitleBlock(
                         onDetail()
                     }
                 )
+            }
+            if (trailingContent != null) {
+                trailingContent()
             }
         }
     }

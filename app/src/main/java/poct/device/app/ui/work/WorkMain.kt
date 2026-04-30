@@ -3,13 +3,10 @@ package poct.device.app.ui.work
 import android.content.Context
 import android.view.WindowManager
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -126,7 +123,19 @@ fun WorkMain(navController: NavController, viewModel: WorkMainViewModel = viewMo
                         } else {
                             viewModel.onExitConfirm()
                         }
-                    }
+                    },
+                    trailingContent = if (sysConfig.value.flow == "nano") ({
+                        Text(
+                            text = "NANO",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(filledFontColor)
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }) else null,
                 )
             },
             bottomBar = {
@@ -348,26 +357,6 @@ fun WorkMainBody(
             .padding(top = 25.dp)
             .fillMaxSize()
     ) {
-        if (sysConfig.value.flow == "nano") {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 15.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                Text(
-                    text = "NANO",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(filledFontColor)
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                )
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-        }
         // TODO 简化信息
 //        WorkStepBlock(stepValue)
         when (actionValue.value) {
