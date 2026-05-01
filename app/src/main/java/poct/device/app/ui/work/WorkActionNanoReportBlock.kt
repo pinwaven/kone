@@ -1,5 +1,6 @@
 package poct.device.app.ui.work
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,7 +24,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,11 +32,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import poct.device.app.R
 import poct.device.app.bean.CaseBean
 import poct.device.app.theme.bgColor
 import poct.device.app.thirdparty.model.nano.NanoBiomarkersResp
@@ -44,24 +45,24 @@ import poct.device.app.thirdparty.model.nano.NanoSubAges
 
 // ── Color palette mirroring nano-miniapp/pages/main/main.js BM_META + SUB_AGE_COLORS
 
-private data class BmMeta(val key: String, val label: String, val unit: String, val color: Color)
+private data class BmMeta(@StringRes val labelRes: Int, val key: String, val unit: String, val color: Color)
 
 private val BM_META = listOf(
-    BmMeta("hsCRP",     "hsCRP",            "mg/L",      Color(0xFFEF4444)),
-    BmMeta("GDF15",     "GDF-15",           "pg/mL",     Color(0xFFF97316)),
-    BmMeta("IL6",       "IL-6",             "pg/mL",     Color(0xFFA855F7)),
-    BmMeta("GA",        "Glycated Albumin", "%",         Color(0xFF6375EC)),
-    BmMeta("CystatinC", "Cystatin C",       "mg/L",      Color(0xFF0EA5E9)),
-    BmMeta("CD38",      "CD38",             "xBaseline", Color(0xFF10B981)),
+    BmMeta(R.string.nano_bm_hscrp,    "hsCRP",     "mg/L",      Color(0xFFEF4444)),
+    BmMeta(R.string.nano_bm_gdf15,    "GDF15",     "pg/mL",     Color(0xFFF97316)),
+    BmMeta(R.string.nano_bm_il6,      "IL6",       "pg/mL",     Color(0xFFA855F7)),
+    BmMeta(R.string.nano_bm_ga,       "GA",        "%",         Color(0xFF6375EC)),
+    BmMeta(R.string.nano_bm_cystatinc,"CystatinC", "mg/L",      Color(0xFF0EA5E9)),
+    BmMeta(R.string.nano_bm_cd38,     "CD38",      "xBaseline", Color(0xFF10B981)),
 )
 
-private data class SubAgeMeta(val key: String, val label: String, val color: Color)
+private data class SubAgeMeta(val key: String, @StringRes val labelRes: Int, val color: Color)
 
 private val SUB_AGES = listOf(
-    SubAgeMeta("ResilienceAge",    "Resilience Age",    Color(0xFFC084D4)),
-    SubAgeMeta("CellularAge",      "Cellular Age",      Color(0xFF10B981)),
-    SubAgeMeta("MetabolicAge",     "Metabolic Age",     Color(0xFF6375EC)),
-    SubAgeMeta("MicroVascularAge", "Micro-Vascular Age", Color(0xFF0EA5E9)),
+    SubAgeMeta("ResilienceAge",    R.string.nano_sub_resilience,    Color(0xFFC084D4)),
+    SubAgeMeta("CellularAge",      R.string.nano_sub_cellular,      Color(0xFF10B981)),
+    SubAgeMeta("MetabolicAge",     R.string.nano_sub_metabolic,     Color(0xFF6375EC)),
+    SubAgeMeta("MicroVascularAge", R.string.nano_sub_microvascular, Color(0xFF0EA5E9)),
 )
 
 private fun bioAgeColor(bio: Double?, chrono: Double?): Color {
@@ -92,7 +93,7 @@ fun WorkActionNanoReportBlock(
     Surface(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 15.dp),
+            .padding(start = 15.dp, end = 15.dp, bottom = 12.dp),
         shape = RoundedCornerShape(12.dp),
         color = bgColor,
     ) {
@@ -100,7 +101,7 @@ fun WorkActionNanoReportBlock(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             StatusFace(bean = bean.value, report = nanoReport.value)
@@ -111,7 +112,7 @@ fun WorkActionNanoReportBlock(
                 if (activeTab == "bioage") {
                     BioAgeTab(report = nanoReport.value!!)
                 } else {
-                    BiomarkersTab(report = nanoReport.value!!, chipKeys = chipKeys.value)
+                    BiomarkersTab(report = nanoReport.value!!)
                 }
             }
         }
@@ -131,7 +132,7 @@ private fun StatusFace(bean: CaseBean, report: NanoBiomarkersResp?) {
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             if (profile != null) {
-                Text("BIO AGE", color = Color(0xFF6B7280), fontSize = 11.sp)
+                Text(stringResource(R.string.nano_bio_age), color = Color(0xFF6B7280), fontSize = 11.sp)
                 Text(
                     text = "%.1f".format(profile.bioAge),
                     color = bioAgeColor(profile.bioAge, profile.chronoAge),
@@ -140,21 +141,19 @@ private fun StatusFace(bean: CaseBean, report: NanoBiomarkersResp?) {
                 )
                 Spacer(Modifier.height(8.dp))
                 if (bean.name.isNotEmpty()) {
-                    Text("PATIENT", color = Color(0xFF6B7280), fontSize = 9.sp)
-                    Text(bean.name, color = Color(0xFF111827), fontSize = 14.sp)
+                    Text(bean.name, color = Color(0xFF111827), fontSize = 20.sp, fontWeight = FontWeight.Medium)
                 }
             } else {
-                Text("STATUS", color = Color(0xFF6B7280), fontSize = 11.sp)
+                Text(stringResource(R.string.nano_status), color = Color(0xFF6B7280), fontSize = 11.sp)
                 Text(
-                    text = "Complete",
+                    text = stringResource(R.string.nano_complete),
                     color = Color(0xFF10B981),
                     fontSize = 22.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 if (bean.name.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
-                    Text("PATIENT", color = Color(0xFF6B7280), fontSize = 9.sp)
-                    Text(bean.name, color = Color(0xFF111827), fontSize = 14.sp)
+                    Text(bean.name, color = Color(0xFF111827), fontSize = 20.sp, fontWeight = FontWeight.Medium)
                 }
             }
         }
@@ -170,8 +169,8 @@ private fun TabRow(active: String, onChange: (String) -> Unit) {
             .background(Color(0xFFEEF2FF), RoundedCornerShape(8.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TabItem("Bio Age",    "bioage",     active, onChange, Modifier.weight(1f))
-        TabItem("Biomarkers", "biomarkers", active, onChange, Modifier.weight(1f))
+        TabItem(stringResource(R.string.nano_tab_bio_age),    "bioage",     active, onChange, Modifier.weight(1f))
+        TabItem(stringResource(R.string.nano_tab_biomarkers), "biomarkers", active, onChange, Modifier.weight(1f))
     }
 }
 
@@ -212,10 +211,10 @@ private fun BioAgeTab(report: NanoBiomarkersResp) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
-        AgeChip(value = "%.1f".format(profile.bioAge),    label = "BIO AGE",
-                color = bioAgeColor(profile.bioAge, profile.chronoAge))
-        AgeChip(value = "%.0f".format(profile.chronoAge), label = "CHRONO AGE",
+        AgeChip(value = "%.0f".format(profile.chronoAge), label = stringResource(R.string.nano_chrono_age),
                 color = Color(0xFFA6C4E5))
+        AgeChip(value = "%.1f".format(profile.bioAge),    label = stringResource(R.string.nano_bio_age),
+                color = bioAgeColor(profile.bioAge, profile.chronoAge))
     }
     Spacer(Modifier.height(20.dp))
     SUB_AGES.forEach { meta ->
@@ -232,7 +231,7 @@ private fun BioAgeTab(report: NanoBiomarkersResp) {
                     .background(meta.color, CircleShape)
             )
             Spacer(Modifier.width(12.dp))
-            Text(meta.label, modifier = Modifier.weight(1f), fontSize = 14.sp,
+            Text(stringResource(meta.labelRes), modifier = Modifier.weight(1f), fontSize = 14.sp,
                  color = Color(0xFF374151))
             Text(
                 text = if (v != null) "%.1f".format(v) else "—",
@@ -253,12 +252,10 @@ private fun AgeChip(value: String, label: String, color: Color) {
 }
 
 @Composable
-private fun BiomarkersTab(report: NanoBiomarkersResp, chipKeys: List<String>?) {
-    val measured = chipKeys?.toSet() ?: emptySet()
+private fun BiomarkersTab(report: NanoBiomarkersResp) {
     val values = report.biomarkers ?: emptyMap()
     BM_META.forEach { meta ->
         val v = values[meta.key]
-        val isMeasured = meta.key in measured
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -272,25 +269,17 @@ private fun BiomarkersTab(report: NanoBiomarkersResp, chipKeys: List<String>?) {
             )
             Spacer(Modifier.width(12.dp))
             Text(
-                meta.label,
+                stringResource(meta.labelRes),
                 modifier = Modifier.weight(1f),
                 fontSize = 14.sp,
-                color = if (isMeasured) Color(0xFF111827) else Color(0xFF9CA3AF),
+                color = Color(0xFF111827),
             )
             val text = if (v != null) "%.2f".format(v) else "—"
             Text(
                 text = "$text  ${meta.unit}",
-                color = if (isMeasured) Color(0xFF111827) else Color(0xFF9CA3AF),
+                color = Color(0xFF111827),
                 fontSize = 13.sp,
             )
         }
-    }
-    if (measured.isNotEmpty() && measured.size < BM_META.size) {
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "Greyed values are estimated from measured biomarkers + age.",
-            color = Color(0xFF9CA3AF),
-            fontSize = 11.sp,
-        )
     }
 }

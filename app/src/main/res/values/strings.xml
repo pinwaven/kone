@@ -549,4 +549,22 @@
     <string name="device_admin_description">此权限用于锁定设备，防止用户退出应用。</string>
 
     <string name="contact_admin">请联系设备管理员。</string>
+
+    <!-- Nano report block -->
+    <string name="nano_bio_age">生理年龄</string>
+    <string name="nano_status">状态</string>
+    <string name="nano_complete">完成</string>
+    <string name="nano_tab_bio_age">生理年龄</string>
+    <string name="nano_tab_biomarkers">生物标志物</string>
+    <string name="nano_chrono_age">实际年龄</string>
+    <string name="nano_sub_resilience">抗压年龄</string>
+    <string name="nano_sub_cellular">细胞年龄</string>
+    <string name="nano_sub_metabolic">代谢年龄</string>
+    <string name="nano_sub_microvascular">微血管年龄</string>
+    <string name="nano_bm_hscrp">hsCRP</string>
+    <string name="nano_bm_gdf15">GDF-15</string>
+    <string name="nano_bm_il6">IL-6</string>
+    <string name="nano_bm_ga">糖化白蛋白</string>
+    <string name="nano_bm_cystatinc">胱抑素 C</string>
+    <string name="nano_bm_cd38">CD38</string>
 </resources>

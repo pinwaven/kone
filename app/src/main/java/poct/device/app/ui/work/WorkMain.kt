@@ -354,7 +354,7 @@ fun WorkMainBody(
 ) {
     Column(
         modifier = Modifier
-            .padding(top = 25.dp)
+            .padding(top = 12.dp)
             .fillMaxSize()
     ) {
         // TODO 简化信息

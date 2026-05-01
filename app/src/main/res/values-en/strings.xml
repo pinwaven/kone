@@ -550,4 +550,22 @@
     <string name="device_admin_description">This permission is used to lock the device and prevent users from exiting the application.</string>
 
     <string name="contact_admin">Please contact the device administrator.</string>
+
+    <!-- Nano report block -->
+    <string name="nano_bio_age">BIO AGE</string>
+    <string name="nano_status">STATUS</string>
+    <string name="nano_complete">Complete</string>
+    <string name="nano_tab_bio_age">Bio Age</string>
+    <string name="nano_tab_biomarkers">Biomarkers</string>
+    <string name="nano_chrono_age">CHRONO AGE</string>
+    <string name="nano_sub_resilience">Resilience Age</string>
+    <string name="nano_sub_cellular">Cellular Age</string>
+    <string name="nano_sub_metabolic">Metabolic Age</string>
+    <string name="nano_sub_microvascular">Micro-Vascular Age</string>
+    <string name="nano_bm_hscrp">hsCRP</string>
+    <string name="nano_bm_gdf15">GDF-15</string>
+    <string name="nano_bm_il6">IL-6</string>
+    <string name="nano_bm_ga">Glycated Albumin</string>
+    <string name="nano_bm_cystatinc">Cystatin C</string>
+    <string name="nano_bm_cd38">CD38</string>
 </resources>
