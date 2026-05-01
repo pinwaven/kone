@@ -105,10 +105,10 @@
     <string name="login_logout">Logout</string>
     <string name="login_logout_confirm">Do you confirm logout of ?</string>
 
-    <string name="home_work_pre_title">Analyzer factory reset</string>
-    <string name="home_work_pre_exit">Exit factory reset？</string>
+    <string name="home_work_pre_title">Analyzer initialization</string>
+    <string name="home_work_pre_exit">Exit analyzer initialization？</string>
     <string name="home_work_pre_no_card_left">Please ensure that there are no test chip left inside the Analyzer </string>
-    <string name="home_work_pre_init_start">Starting factory reset</string>
+    <string name="home_work_pre_init_start">Starting initialization</string>
     <string name="home_work_pre_init_ing">Resetting analyzer, please wait…</string>
     <string name="home_work_pre_init_done">Reset finished, analyzer is ready for use</string>
     <string name="home_work_pre_init_failed">Reset failed, please try again later </string>
