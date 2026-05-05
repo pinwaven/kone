@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap
 @SuppressLint("StaticFieldLeak")
 object AppParams {
     // 模拟硬件
-    val devMock = true
+    val devMock = false
 
     //val devMock = true
     var testCount: Int = 0
