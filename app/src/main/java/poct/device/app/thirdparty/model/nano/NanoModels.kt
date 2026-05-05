@@ -130,3 +130,10 @@ data class NanoKinoResultResp(
     val success: Boolean = false,
     val biomarkerId: Long? = null,
 )
+
+// ── GET /api/kino-upgrade response ─────────────────────────────────────────
+
+data class NanoUpgradeResp(
+    val version: String,
+    val url: String,
+)

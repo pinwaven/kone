@@ -390,6 +390,14 @@
     <string name="sys_fun_api_test_latency">延迟</string>
     <string name="sys_fun_api_test_error">错误</string>
     <string name="sys_fun_api_test_body">响应内容</string>
+    <string name="sys_fun_api_upgrade_title">APK 升级</string>
+    <string name="sys_fun_api_upgrade_local_version">当前版本</string>
+    <string name="sys_fun_api_upgrade_btn">检查 Nano 升级</string>
+    <string name="sys_fun_api_upgrade_checking">正在检查…</string>
+    <string name="sys_fun_api_upgrade_latest">已是最新版本</string>
+    <string name="sys_fun_api_upgrade_available">发现新版本</string>
+    <string name="sys_fun_api_upgrade_go">前往升级</string>
+    <string name="sys_fun_api_upgrade_error">检查失败</string>
     <string name="sys_fun_system">系统设置</string>
     <string name="sys_fun_system_config">系统配置</string>
     <string name="sys_fun_xtpz">功能配置</string>

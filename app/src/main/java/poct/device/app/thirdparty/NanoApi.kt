@@ -34,6 +34,10 @@ object NanoApi {
     const val FLOW_CLINICAL = "clinical"
     const val FLOW_NANO     = "nano"
 
+    // Holds a pre-fetched upgrade result so AfterSaleVersionUpgradeViewModel can
+    // consume it directly without re-querying (used when upgrade is triggered from SysFunApiTest).
+    var pendingUpgrade: poct.device.app.thirdparty.model.nano.NanoUpgradeResp? = null
+
     private val httpUtils = HttpUtils()
     private val httpUtilsSlow = HttpUtils(readTimeout = 60)
     private val JSON = "application/json".toMediaType()
@@ -163,6 +167,27 @@ object NanoApi {
             null
         } catch (e: JsonParseException) {
             Timber.w(e, "NanoApi.postKinoResult parse failed")
+            null
+        }
+    }
+
+    /**
+     * Queries `${nanoBaseUrl}/api/kino-upgrade` for the latest APK version and OSS URL.
+     * Returns null if the request fails or is unauthorized.
+     */
+    suspend fun checkUpgrade(): poct.device.app.thirdparty.model.nano.NanoUpgradeResp? = withContext(Dispatchers.IO) {
+        val base = baseUrl()
+        if (base.isEmpty()) {
+            Timber.w("NanoApi.checkUpgrade: nanoBaseUrl not configured")
+            return@withContext null
+        }
+        val url = "$base/api/kino-upgrade"
+        try {
+            val request = Request.Builder().url(url).withAuth(apiToken()).get().build()
+            val body = httpUtils.executeRequest(request)
+            App.gson.fromJson(body, poct.device.app.thirdparty.model.nano.NanoUpgradeResp::class.java)
+        } catch (e: Exception) {
+            Timber.w(e, "NanoApi.checkUpgrade failed")
             null
         }
     }

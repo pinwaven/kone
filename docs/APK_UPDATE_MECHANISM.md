@@ -1,58 +1,143 @@
 # APK Update Mechanism
 
-This document describes the technical implementation of the self-update process for the Kone Android application.
+Kone supports two upgrade paths:
 
-## Overview
-The Kone application supports autonomous self-updates via a remote server. The process is managed by `AfterSaleVersionUpgradeViewModel.kt` and follows a **Check -> Validate -> Download -> Install** lifecycle.
+| Path | Trigger | Source |
+|---|---|---|
+| **Nano remote upgrade** | "检查 Nano 升级" button in Settings → System Functions → API Test | Waven Nano backend (`/api/kino-upgrade`) |
+| **U-disk / file manager** | "U盘升级" button in Settings → After-Sale | Local file via system file manager |
 
-## 1. Version Discovery
-The update process begins when the user triggers a version check or when the app checks for updates automatically.
+---
 
-- **Service Endpoint:** `SbEdgeFunc.getDeviceConfig(deviceId)`
-- **Logic:** The app retrieves the remote `apkVersion` from the cloud and compares it with the local version stored in the system configuration.
-- **Comparison:** Uses `VersionUtils.isLessThan(local, remote)` to determine if a newer version exists.
+## 1. Nano Remote Upgrade (Primary)
 
-## 2. Download Preparation
-Before initiating the download, the app performs safety and connectivity checks:
+### 1.1 Where it lives
 
-- **URL Construction:** `https://poct-upgrade.virtualhealth.cn/apk/{version}.apk`
-- **Dns/Connectivity Check:** `checkUrlAvailability(url)` performs an HTTP `HEAD` request to ensure the file exists and the server is reachable before committing resources to a full download.
-- **State Management:** Sets `isDownloading = true` to prevent concurrent download attempts.
+`Settings → System Functions → API Test` (`SysFunApiTest.kt`).
 
-## 3. Background Download
-The app leverages the Android system's `DownloadManager` for robust file transfer.
+The upgrade section is entirely inline on this screen. There is no navigation to a separate upgrade screen — all state (checking, progress, errors) is displayed here.
 
-- **Request Configuration:**
-  - Title/Description: "应用更新" / "正在下载新版本..."
-  - Visibility: `VISIBILITY_VISIBLE_NOTIFY_COMPLETED`
-  - MIME Type: `application/vnd.android.package-archive`
-- **Storage Path:** 
-  - Android 10+: `context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)`
-  - Older: `Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)`
-- **Progress Tracking:** The ViewModel polls the `DownloadManager` every second to update the UI with percentage progress.
+### 1.2 Flow
 
-## 4. Installation
-Once the download is complete (`STATUS_SUCCESSFUL`), the installation phase begins.
+```
+User taps "检查 Nano 升级"
+    │
+    ▼
+NanoApi.checkUpgrade()
+    GET /api/kino-upgrade
+    Authorization: Bearer <token>
+    │
+    ▼
+Compare remote version vs deviceConfig.software
+(VersionUtils.isLessThan)
+    │
+    ├─ Up to date          → UpgradeCheckState.UpToDate (green badge)
+    ├─ New version found   → UpgradeCheckState.Available(version, url) (amber badge + button)
+    ├─ Empty response      → UpgradeCheckState.Error("Nano 暂无可用版本")
+    └─ Null response       → UpgradeCheckState.Error("无法连接 Nano 升级接口")
 
-### FileProvider Security
-To comply with Android security standards (especially Android 7.0+), the app uses a `FileProvider` to share the APK with the system installer.
-- **Authority:** `${applicationId}.fileprovider`
-- **Paths:** Defined in `res/xml/device_upgrade_config.xml`.
+User taps "立即升级"
+    │
+    ▼
+upgradeVm.onUpgradeFromUrl(url, version)      ← AfterSaleVersionUpgradeViewModel
+    │  sets isDownloading = true
+    │  emits EVT_DOWNLOADING
+    │
+    ▼
+downloadAndInstallApkSync(url, version, configBean)
+    │
+    ▼
+downloadApkWithProgressSync(url, version)     ← DownloadManager
+    │  polls every 1 s → emits EVT_DOWNLOADING "正在下载新版本... X%"
+    │  on STATUS_SUCCESSFUL → returns File
+    │
+    ▼
+installApkSync(apkFile, remoteConfigBean)
+    │  saves new version to SysConfigService
+    │  launches system package installer (Intent.ACTION_VIEW + FileProvider)
+    │
+    └─ on failure → EVT_ERROR
+```
 
-### Execution
-The app launches the system package installer via an `Intent`:
-- **Action:** `Intent.ACTION_VIEW`
-- **Data:** `Uri` from `FileProvider.getUriForFile`
-- **Flags:** 
-    - `Intent.FLAG_GRANT_READ_URI_PERMISSION`
-    - `Intent.FLAG_ACTIVITY_NEW_TASK`
+### 1.3 State machine (`SysFunApiTest.kt`)
 
-## 5. Manual/U-Disk Update
-An alternative update path exists for offline scenarios:
-- **Location:** `AfterSaleVersionUpgradeViewModel.onUDiskUpgrade()`
-- **Method:** Attempts to launch the system file manager (`com.mediatek.filemanager`) to allow manual APK selection and installation.
+```kotlin
+sealed class UpgradeCheckState {
+    object Idle       : UpgradeCheckState()
+    object Checking   : UpgradeCheckState()
+    object UpToDate   : UpgradeCheckState()
+    data class Available(val version: String, val url: String) : UpgradeCheckState()
+    data class Upgrading(val msg: String)  : UpgradeCheckState()   // download/install in progress
+    data class Error(val msg: String)      : UpgradeCheckState()
+}
+```
 
-## Relevant Files
-- `app/src/main/java/poct/device/app/ui/aftersale/AfterSaleVersionUpgradeViewModel.kt`: Core logic.
-- `app/src/main/AndroidManifest.xml`: Permissions and FileProvider declaration.
-- `app/src/main/res/xml/device_upgrade_config.xml`: Storage path configuration for updates.
+`upgradeState` is a local Compose `var` in `SysFunApiTest`. It is updated by:
+- The check button coroutine (Idle → Checking → Available / UpToDate / Error)
+- The upgrade button lambda (Available → Upgrading)
+- A `LaunchedEffect(upgradeVm)` that collects `upgradeVm.actionState` via `collectLatest` and mirrors ViewModel events into local state:
+
+| ViewModel event | Local state |
+|---|---|
+| `EVT_DOWNLOADING` | `Upgrading(msg)` |
+| `EVT_INSTALLING` | `Upgrading(msg)` |
+| `EVT_ERROR` | `Error(msg)` |
+| `EVT_DOWNLOAD_FAILED` | `Error(msg)` |
+
+### 1.4 ViewModel method — `onUpgradeFromUrl`
+
+`AfterSaleVersionUpgradeViewModel.onUpgradeFromUrl(url, version)` is the entry point for Nano-sourced upgrades. It bypasses the normal version-check flow entirely, using the URL and version string already returned by `/api/kino-upgrade`.
+
+The older `onCheckVersion()` method is retained for the legacy after-sale screen but is not used by the Nano upgrade path.
+
+### 1.5 Version comparison
+
+`VersionUtils.isLessThan(local, remote)` — returns `true` when the remote version is strictly greater than the local version. The local version comes from `ConfigInfoV2Bean.software` (loaded from `ConfigInfoBean.PREFIX` in `SysConfigService`), not from `ConfigSysBean`.
+
+### 1.6 Download
+
+Uses Android's `DownloadManager`. The app polls every 1 second and emits progress via `actionState`. The destination file is:
+- Android 10+: `context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)/app_update_{version}.apk`
+- Older: `Environment.getExternalStoragePublicDirectory(DIRECTORY_DOWNLOADS)/app_update_{version}.apk`
+
+The pre-download HEAD check (`checkUrlAvailability`) has been removed. OSS presigned GET URLs are method-specific and reject HEAD requests, causing false failures before the download even starts.
+
+### 1.7 Installation
+
+`FileProvider` is used (authority: `${packageName}.fileprovider`) with paths defined in `res/xml/device_upgrade_config.xml`. The system package installer is launched via `Intent.ACTION_VIEW`. After a successful install launch, `SysConfigService` is updated with the new version.
+
+---
+
+## 2. U-Disk / File Manager Upgrade
+
+`AfterSaleVersionUpgradeViewModel.onUDiskUpgrade()` attempts to launch the system file manager (`com.mediatek.filemanager`) for manual APK selection. This is an offline fallback for scenarios where the device cannot reach the Nano backend.
+
+---
+
+## 3. API Endpoint
+
+`GET /api/kino-upgrade` on the Nano worker returns the active release:
+
+```json
+{ "version": "0.2.1", "url": "https://kone-apk.fros.cc/apk/15e3c862.apk?..." }
+```
+
+Empty strings (not `null`) are returned when no release is active, matching the non-nullable `String` fields in `NanoUpgradeResp`.
+
+The download URL uses the `kone-apk.fros.cc` custom CNAME domain — Aliyun OSS blocks APK distribution via the default `*.oss-cn-shanghai.aliyuncs.com` endpoint.
+
+See `nano/docs/architecture/kone-apk-upgrade.md` for the full backend design (DB schema, OSS setup, admin panel upload flow).
+
+---
+
+## 4. Relevant Files
+
+| File | Purpose |
+|---|---|
+| `ui/sysfun/SysFunApiTest.kt` | Upgrade UI — check button, state display, ViewModel wiring |
+| `ui/aftersale/AfterSaleVersionUpgradeViewModel.kt` | `onUpgradeFromUrl()`, download/install logic |
+| `thirdparty/NanoApi.kt` | `checkUpgrade()` — `GET /api/kino-upgrade` |
+| `thirdparty/model/nano/NanoModels.kt` | `NanoUpgradeResp` data class |
+| `utils/app/VersionUtils.kt` | `isLessThan()` for version comparison |
+| `res/values/strings.xml` | `sys_fun_api_upgrade_*` string resources |
+| `res/xml/device_upgrade_config.xml` | FileProvider paths for APK install |

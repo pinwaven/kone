@@ -20,22 +20,22 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.Request
 import poct.device.app.App
 import poct.device.app.R
 import poct.device.app.bean.ConfigInfoBean
 import poct.device.app.bean.ConfigInfoV2Bean
+import poct.device.app.bean.ConfigSysBean
 import poct.device.app.bean.VersionBean
 import poct.device.app.bean.VersionUpgradeInfo
 import poct.device.app.entity.service.SysConfigService
 import poct.device.app.state.ActionState
 import poct.device.app.state.ViewState
+import poct.device.app.thirdparty.NanoApi
 import poct.device.app.thirdparty.SbEdgeFunc
 import poct.device.app.ui.sysfun.SysFunInfoViewModel.Companion.EVT_CONTACT_ADMIN
 import poct.device.app.utils.app.AppFileUtils
 import poct.device.app.utils.app.AppUpgradeUtils
 import poct.device.app.utils.app.VersionUtils
-import poct.device.app.utils.common.HttpUtils
 import poct.device.app.utils.common.SmartDnsResolver
 import timber.log.Timber
 import java.io.File
@@ -137,8 +137,31 @@ class AfterSaleVersionUpgradeViewModel : ViewModel() {
                 val currentConfigBean = withContext(Dispatchers.IO) {
                     SysConfigService.findBean(ConfigInfoBean.PREFIX, ConfigInfoV2Bean::class)
                 }
-                val deviceId: String = App.getDeviceId()
-                val remoteConfigBean = SbEdgeFunc.getDeviceConfig(deviceId)
+
+                val sysConfig = withContext(Dispatchers.IO) {
+                    SysConfigService.findBean(ConfigSysBean.PREFIX, ConfigSysBean::class)
+                }
+
+                val remoteConfigBean: ConfigInfoV2Bean
+                val downloadApkUrl: String
+
+                val pending = NanoApi.pendingUpgrade
+                if (pending != null) {
+                    NanoApi.pendingUpgrade = null
+                    remoteConfigBean = currentConfigBean.copy(software = pending.version)
+                    downloadApkUrl = pending.url
+                } else if (sysConfig.flow == "nano") {
+                    val upgrade = NanoApi.checkUpgrade()
+                    if (upgrade == null) {
+                        throw Exception("Nano upgrade check failed")
+                    }
+                    remoteConfigBean = currentConfigBean.copy(software = upgrade.version)
+                    downloadApkUrl = upgrade.url
+                } else {
+                    val deviceId: String = App.getDeviceId()
+                    remoteConfigBean = SbEdgeFunc.getDeviceConfig(deviceId)
+                    downloadApkUrl = String.format(APK_URL, remoteConfigBean.software)
+                }
 
                 Timber.w("currentConfig %s", currentConfigBean.software)
                 Timber.w("remoteConfig %s", remoteConfigBean.software)
@@ -148,8 +171,6 @@ class AfterSaleVersionUpgradeViewModel : ViewModel() {
                         remoteConfigBean.software
                     )
                 ) {
-                    val downloadApkUrl = String.format(APK_URL, remoteConfigBean.software)
-
                     // 下载APK文件
                     val isOk = downloadAndInstallApkSync(
                         url = downloadApkUrl,
@@ -261,6 +282,38 @@ class AfterSaleVersionUpgradeViewModel : ViewModel() {
         actionState.value = ActionState(event = EVT_HANDLE)
     }
 
+    fun onUpgradeFromUrl(url: String, version: String) {
+        if (isDownloading) return
+        viewModelScope.launch {
+            isDownloading = true
+            actionState.value = ActionState(event = EVT_DOWNLOADING, msg = "开始下载新版本...")
+            try {
+                val configBean = withContext(Dispatchers.IO) {
+                    SysConfigService.findBean(ConfigInfoBean.PREFIX, ConfigInfoV2Bean::class)
+                }
+                val ok = downloadAndInstallApkSync(
+                    url = url,
+                    versionCode = version,
+                    remoteConfigBean = configBean.copy(software = version),
+                )
+                if (!ok) {
+                    actionState.value = ActionState(
+                        event = EVT_ERROR,
+                        msg = App.getContext().getString(R.string.after_sale_upgrade_failed)
+                    )
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "onUpgradeFromUrl failed")
+                actionState.value = ActionState(
+                    event = EVT_ERROR,
+                    msg = e.message ?: App.getContext().getString(R.string.after_sale_upgrade_failed)
+                )
+            } finally {
+                isDownloading = false
+            }
+        }
+    }
+
     companion object {
         /**
          * 查看处理升级
@@ -338,56 +391,10 @@ class AfterSaleVersionUpgradeViewModel : ViewModel() {
         }
     }
 
-    /**
-     * 检查URL是否可访问
-     */
-    private suspend fun checkUrlAvailability(url: String): Boolean = withContext(Dispatchers.IO) {
-        return@withContext try {
-            val httpUtil = HttpUtils()
-            val client = httpUtil.buildClient()
-
-            val request = Request.Builder()
-                .url(url)
-                .head() // 使用HEAD请求，只获取头部信息
-                .build()
-
-            val response = client.newCall(request).execute()
-
-            if (response.isSuccessful) {
-                Timber.d("URL检查成功: ${response.code}")
-                true
-            } else {
-                Timber.e("URL检查失败: ${response.code} ${response.message}")
-                false
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "URL检查异常")
-            false
-        }
-    }
-
-    /**
-     * 增强的下载方法（带URL验证）
-     */
     private suspend fun downloadApkWithValidation(
         url: String,
         versionCode: String
-    ): File? = withContext(Dispatchers.IO) {
-        // 1. 先检查URL可用性
-        val isUrlValid = checkUrlAvailability(url)
-        if (!isUrlValid) {
-            withContext(Dispatchers.Main) {
-                actionState.value = ActionState(
-                    msg = "下载链接不可用，请稍后重试",
-                    event = EVT_DOWNLOAD_FAILED
-                )
-            }
-            return@withContext null
-        }
-
-        // 2. 进行下载
-        return@withContext downloadApkWithProgressSync(url, versionCode)
-    }
+    ): File? = downloadApkWithProgressSync(url, versionCode)
 
     /**
      * 带进度显示的下载APK
@@ -441,50 +448,63 @@ class AfterSaleVersionUpgradeViewModel : ViewModel() {
             val downloadId = downloadManager.enqueue(request)
 
             // 轮询查询下载状态
+            var pausedTicks = 0
             while (isDownloading) {
-                delay(1000) // 每秒查询一次
+                delay(1000)
 
                 val query = DownloadManager.Query().setFilterById(downloadId)
                 val cursor = downloadManager.query(query)
 
-                if (cursor.moveToFirst()) {
-                    val status =
-                        cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                    val downloaded =
-                        cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
-                    val total =
-                        cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+                if (!cursor.moveToFirst()) {
+                    cursor.close()
+                    // Download record vanished — treat as failure
+                    isDownloading = false
+                    return@withContext null
+                }
 
-                    when (status) {
-                        DownloadManager.STATUS_RUNNING -> {
-                            // 更新下载进度
-                            val progress = if (total > 0) {
-                                (downloaded * 100 / total)
-                            } else 0
+                val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                val downloaded = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+                cursor.close()
 
-                            withContext(Dispatchers.Main) {
-                                actionState.value = ActionState(
-                                    event = EVT_DOWNLOADING,
-                                    msg = "正在下载新版本... $progress%"
-                                )
-                            }
+                when (status) {
+                    DownloadManager.STATUS_PENDING, DownloadManager.STATUS_RUNNING -> {
+                        pausedTicks = 0
+                        val progress = if (total > 0) (downloaded * 100 / total).toInt() else 0
+                        withContext(Dispatchers.Main) {
+                            actionState.value = ActionState(
+                                event = EVT_DOWNLOADING,
+                                msg = "正在下载新版本... $progress%"
+                            )
                         }
+                    }
 
-                        DownloadManager.STATUS_SUCCESSFUL -> {
-                            Timber.d("下载完成")
-                            cursor.close()
-                            isDownloading = false
-                            return@withContext destinationFile
+                    DownloadManager.STATUS_PAUSED -> {
+                        pausedTicks++
+                        withContext(Dispatchers.Main) {
+                            actionState.value = ActionState(
+                                event = EVT_DOWNLOADING,
+                                msg = "下载暂停，等待重试... ($pausedTicks)"
+                            )
                         }
-
-                        DownloadManager.STATUS_FAILED -> {
-                            cursor.close()
+                        if (pausedTicks >= 10) {
+                            downloadManager.remove(downloadId)
                             isDownloading = false
                             return@withContext null
                         }
                     }
+
+                    DownloadManager.STATUS_SUCCESSFUL -> {
+                        Timber.d("下载完成")
+                        isDownloading = false
+                        return@withContext destinationFile
+                    }
+
+                    DownloadManager.STATUS_FAILED -> {
+                        isDownloading = false
+                        return@withContext null
+                    }
                 }
-                cursor.close()
             }
 
             return@withContext null
