@@ -16,13 +16,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -74,6 +76,7 @@ fun SysFunApiTest(navController: NavController) {
     val upgradeVm: AfterSaleVersionUpgradeViewModel = viewModel()
     var config by remember { mutableStateOf(ConfigSysBean.Empty) }
     var deviceConfig by remember { mutableStateOf(ConfigInfoV2Bean.Empty) }
+    var selectedTab by remember { mutableIntStateOf(0) }
     var state by remember { mutableStateOf<TestState>(TestState.Idle) }
     var upgradeState by remember { mutableStateOf<UpgradeCheckState>(UpgradeCheckState.Idle) }
 
@@ -107,116 +110,121 @@ fun SysFunApiTest(navController: NavController) {
             )
         },
     ) {
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(bgColor)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(20.dp),
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = Color.White,
+                contentColor = Color(0xFF6375EC),
             ) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color.White,
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = { Text(stringResource(id = R.string.sys_fun_api_test_tab_probe)) },
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = { Text(stringResource(id = R.string.sys_fun_api_test_tab_upgrade)) },
+                )
+            }
+
+            when (selectedTab) {
+                0 -> Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(20.dp),
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        InfoRow(
-                            label = stringResource(id = R.string.sys_fun_api_test_url),
-                            value = AppParams.NANO_BASE_URL,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        InfoRow(
-                            label = stringResource(id = R.string.sys_fun_api_test_device_id),
-                            value = config.nanoDeviceId.ifEmpty { "—" },
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        InfoRow(
-                            label = stringResource(id = R.string.sys_fun_api_test_flow),
-                            value = config.flow.ifEmpty { "clinical" },
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(20.dp))
-
-                AppFilledButton(
-                    onClick = {
-                        if (state == TestState.Running) return@AppFilledButton
-                        state = TestState.Running
-                        scope.launch {
-                            val result = NanoApi.probe()
-                            state = TestState.Done(result)
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.White,
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            InfoRow(
+                                label = stringResource(id = R.string.sys_fun_api_test_url),
+                                value = AppParams.NANO_BASE_URL,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            InfoRow(
+                                label = stringResource(id = R.string.sys_fun_api_test_device_id),
+                                value = config.nanoDeviceId.ifEmpty { "—" },
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            InfoRow(
+                                label = stringResource(id = R.string.sys_fun_api_test_flow),
+                                value = config.flow.ifEmpty { "clinical" },
+                            )
                         }
-                    },
-                    text = stringResource(id = R.string.sys_fun_api_test_btn),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Spacer(Modifier.height(20.dp))
-
-                ResultPanel(state)
-
-                Spacer(Modifier.height(28.dp))
-                Divider(color = Color(0xFFE5E7EB))
-                Spacer(Modifier.height(20.dp))
-
-                Text(
-                    text = stringResource(id = R.string.sys_fun_api_upgrade_title),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF111827),
-                )
-
-                Spacer(Modifier.height(12.dp))
-
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color.White,
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        InfoRow(
-                            label = stringResource(id = R.string.sys_fun_api_upgrade_local_version),
-                            value = deviceConfig.software.ifEmpty { "—" },
-                        )
                     }
-                }
-
-                Spacer(Modifier.height(20.dp))
-
-                AppFilledButton(
-                    onClick = {
-                        if (upgradeState == UpgradeCheckState.Checking) return@AppFilledButton
-                        upgradeState = UpgradeCheckState.Checking
-                        scope.launch {
-                            val resp = NanoApi.checkUpgrade()
-                            upgradeState = when {
-                                resp == null -> UpgradeCheckState.Error("无法连接 Nano 升级接口")
-                                resp.version.isNullOrEmpty() || resp.url.isNullOrEmpty() ->
-                                    UpgradeCheckState.Error("Nano 暂无可用版本")
-                                VersionUtils.isLessThan(deviceConfig.software, resp.version) ->
-                                    UpgradeCheckState.Available(resp.version, resp.url)
-                                else -> UpgradeCheckState.UpToDate
+                    Spacer(Modifier.height(20.dp))
+                    AppFilledButton(
+                        onClick = {
+                            if (state == TestState.Running) return@AppFilledButton
+                            state = TestState.Running
+                            scope.launch {
+                                val result = NanoApi.probe()
+                                state = TestState.Done(result)
                             }
+                        },
+                        text = stringResource(id = R.string.sys_fun_api_test_btn),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(20.dp))
+                    ResultPanel(state)
+                }
+
+                1 -> Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(20.dp),
+                ) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.White,
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            InfoRow(
+                                label = stringResource(id = R.string.sys_fun_api_upgrade_local_version),
+                                value = deviceConfig.software.ifEmpty { "—" },
+                            )
                         }
-                    },
-                    text = stringResource(id = R.string.sys_fun_api_upgrade_btn),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Spacer(Modifier.height(20.dp))
-
-                UpgradeResultPanel(
-                    state = upgradeState,
-                    onUpgrade = { url, version ->
-                        upgradeState = UpgradeCheckState.Upgrading("开始下载新版本…")
-                        upgradeVm.onUpgradeFromUrl(url, version)
-                    },
-                )
+                    }
+                    Spacer(Modifier.height(20.dp))
+                    AppFilledButton(
+                        onClick = {
+                            if (upgradeState == UpgradeCheckState.Checking) return@AppFilledButton
+                            upgradeState = UpgradeCheckState.Checking
+                            scope.launch {
+                                val resp = NanoApi.checkUpgrade()
+                                upgradeState = when {
+                                    resp == null -> UpgradeCheckState.Error("无法连接 Nano 升级接口")
+                                    resp.version.isNullOrEmpty() || resp.url.isNullOrEmpty() ->
+                                        UpgradeCheckState.Error("Nano 暂无可用版本")
+                                    VersionUtils.isLessThan(deviceConfig.software, resp.version) ->
+                                        UpgradeCheckState.Available(resp.version, resp.url)
+                                    else -> UpgradeCheckState.UpToDate
+                                }
+                            }
+                        },
+                        text = stringResource(id = R.string.sys_fun_api_upgrade_btn),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(20.dp))
+                    UpgradeResultPanel(
+                        state = upgradeState,
+                        onUpgrade = { url, version ->
+                            upgradeState = UpgradeCheckState.Upgrading("开始下载新版本…")
+                            upgradeVm.onUpgradeFromUrl(url, version)
+                        },
+                    )
+                }
             }
         }
     }

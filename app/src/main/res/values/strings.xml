@@ -378,6 +378,8 @@
     <string name="sys_fun_menu_device">设备信息</string>
     <string name="sys_fun_api_test_menu">API 测试</string>
     <string name="sys_fun_api_test_title">Nano API 测试</string>
+    <string name="sys_fun_api_test_tab_probe">连接测试</string>
+    <string name="sys_fun_api_test_tab_upgrade">APK 升级</string>
     <string name="sys_fun_api_test_url">Nano 地址</string>
     <string name="sys_fun_api_test_device_id">Nano 设备号</string>
     <string name="sys_fun_api_test_flow">检测流程</string>

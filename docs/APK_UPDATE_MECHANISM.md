@@ -15,7 +15,14 @@ Kone supports two upgrade paths:
 
 `Settings → System Functions → API Test` (`SysFunApiTest.kt`).
 
-The upgrade section is entirely inline on this screen. There is no navigation to a separate upgrade screen — all state (checking, progress, errors) is displayed here.
+The screen has two tabs:
+
+| Tab | Label | Content |
+|---|---|---|
+| 0 | 连接测试 | Nano base URL, device ID, flow — probe button + result panel |
+| 1 | APK 升级 | Local version, check button + download/install progress panel |
+
+There is no navigation to a separate upgrade screen — all upgrade state (checking, downloading, errors) is displayed inline on the APK 升级 tab.
 
 ### 1.2 Flow
 
