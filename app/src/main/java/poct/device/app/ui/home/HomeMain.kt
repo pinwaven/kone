@@ -91,13 +91,9 @@ fun HomeMainBody(
     Timber.w("===${App.gson.toJson(user)}")
 
     val images = listOf(
-        // TODO 简化信息
-//        R.drawable.one,
-//        R.drawable.two,
-//        R.drawable.three,
-//        R.drawable.four,
-        R.drawable.five,
-//        R.drawable.six,
+        R.drawable.post_nanovate1,
+        R.drawable.post_nanovate2,
+        R.drawable.post_nanovate3,
     )
 
     Column(
