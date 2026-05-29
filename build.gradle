@@ -1,8 +1,8 @@
 buildscript {
     ext {
         KEY_ALIAS = "app"
-        STORE_PASSWORD = "app1424"
-        KEY_PASSWORD = "app1424"
+        STORE_PASSWORD = "kone1688"
+        KEY_PASSWORD = "kone1688"
         compile_sdk_version = 35
         target_sdk_version = 31
         min_version = 28

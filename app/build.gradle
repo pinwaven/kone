@@ -18,8 +18,8 @@ android {
         minSdk min_version
         //noinspection ExpiredTargetSdkVersion
         targetSdk target_sdk_version
-        versionCode 2
-        versionName "1.0.37.8"
+        versionCode 3
+        versionName "0.3.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -45,8 +45,8 @@ android {
         release {
             v2SigningEnabled true
             try {
-                println file("$rootProject.projectDir/keystore.jks").exists()
-                storeFile file("$rootProject.projectDir/keystore.jks")
+                println file("$rootProject.projectDir/keys/kone-release-key.jks").exists()
+                storeFile file("$rootProject.projectDir/keys/kone-release-key.jks")
                 storePassword STORE_PASSWORD
                 keyAlias KEY_ALIAS
                 keyPassword KEY_PASSWORD
