@@ -11,4 +11,4 @@ Welcome to the Kone (Kino-One) project documentation.
 - [Software Upgrades](Software%20Upgrades.md) - Current state of Wi-Fi software and hardware upgrades.
 - [APK Update Mechanism](APK_UPDATE_MECHANISM.md) - Technical details of the APK self-update process.
 - [Nano Flow](NANO_FLOW.md) - End-to-end integration with the Waven Nano AI platform.
-
+- [Factory Test and Venue Mode Requirements](FACTORY_TEST_AND_VENUE_MODE_REQUIREMENTS.md) - Confirmed requirements for factory testing, temporary operation, and venue mode.
