@@ -33,7 +33,8 @@ fun SysConfigMain(navController: NavController) {
             AppTopBar(
                 navController = navController,
                 title = stringResource(id = R.string.sys_config),
-                backEnabled = true
+                backEnabled = true,
+                showNanoEnvironmentBadge = true
             )
         }
     ) {

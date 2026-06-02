@@ -76,6 +76,7 @@ fun SysConfigSysCombine(
                     navController = navController,
                     title = title,
                     backEnabled = true,
+                    showNanoEnvironmentBadge = true,
                     onBack = {
                         if (mode == "view") {
                             navController.popBackStack()

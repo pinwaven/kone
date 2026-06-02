@@ -112,6 +112,8 @@
     <string name="home_work_pre_init_ing">Resetting analyzer, please wait…</string>
     <string name="home_work_pre_init_done">Reset finished, analyzer is ready for use</string>
     <string name="home_work_pre_init_failed">Reset failed, please try again later </string>
+    <string name="home_start_detection">Start detection</string>
+    <string name="home_venue_detection">Venue detection</string>
 
     <string name="work_main">Sample test</string>
     <string name="work_main_exit">Are you sure you want to exit sample testing</string>
@@ -182,6 +184,9 @@
     <string name="work_report_gen">Generate</string>
     <string name="work_report_exit">Exit testing</string>
     <string name="work_report_continue">Continue testing</string>
+    <string name="venue_continue_detection">Insert next</string>
+    <string name="venue_exit_mode">Exit venue mode</string>
+    <string name="venue_continue_confirm">Has the chip card been replaced?</string>
     <string name="work_report_print">Print report</string>
     <string name="work_report_check_scope">scope check fail</string>
     <string name="work_report_check_error">Please replace the chip and retest</string>
@@ -439,6 +444,9 @@
     <string name="after_sale_my_service">My service</string>
     <string name="after_sale_sun_login">Remote control</string>
     <string name="after_sale_temp">Temporary operation</string>
+    <string name="factory_test">Factory test</string>
+    <string name="factory_test_password_content">Factory test password is required</string>
+    <string name="venue_mode">Venue mode</string>
     <string name="after_sale_sun_upgrade">Remote Control</string>
     <string name="after_sale_version_upgrade">Upgrade</string>
     <string name="after_sale_version_history">History</string>

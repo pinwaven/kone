@@ -96,8 +96,15 @@ class WorkMainViewModel : ViewModel() {
     val bean = MutableStateFlow(CaseBean())
 
     val showCutOff2Time = MutableStateFlow(true)
+    val skipCurrentCutOff2Wait = MutableStateFlow(false)
     fun onCutOff2TimeFinished() {
         showCutOff2Time.value = false
+    }
+
+    fun onSkipCutOff2WaitAndStartDetection() {
+        skipCurrentCutOff2Wait.value = false
+        showCutOff2Time.value = false
+        doNext()
     }
 
     // 检测中
@@ -1690,6 +1697,8 @@ class WorkMainViewModel : ViewModel() {
                 }
 
                 showCutOff2Time.value = curCardConfig.value.cutOff2 > 0
+                skipCurrentCutOff2Wait.value =
+                    AppParams.runtimeModeState.consumeVenueContinueCutOffWaitSkip()
 
                 if (frosData.qrCode.isEmpty()) {
                     actionState.value = ActionState(
@@ -1921,6 +1930,8 @@ class WorkMainViewModel : ViewModel() {
         cardConfig = bean.value.cardInfo.cardConfig
         curCardConfig.value = cardConfig!!
         showCutOff2Time.value = curCardConfig.value.cutOff2 > 0
+        skipCurrentCutOff2Wait.value =
+            AppParams.runtimeModeState.consumeVenueContinueCutOffWaitSkip()
 
         val workFlowTmp = genWorkFlowV2()
         if (workFlowTmp != null) {
@@ -2359,6 +2370,11 @@ class WorkMainViewModel : ViewModel() {
 //        updateAction(ACTION_START)
         updateAction(ACTION_CASE_CHIP)
         onClearInteraction()
+    }
+
+    fun onVenueModeReportContinue() {
+        AppParams.runtimeModeState.requestVenueContinueDetection()
+        onActionReportContinue()
     }
 
     fun onActionReportPrintConfirm() {

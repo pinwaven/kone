@@ -8,10 +8,13 @@ import poct.device.app.bean.PrinterInfo
 import poct.device.app.bean.ScannerInfo
 import poct.device.app.bean.WlanBean
 import poct.device.app.entity.User
+import poct.device.app.state.RuntimeModeState
 import java.util.concurrent.ConcurrentHashMap
 
 @SuppressLint("StaticFieldLeak")
 object AppParams {
+    val runtimeModeState = RuntimeModeState()
+
     // 模拟硬件
     val devMock = false
 

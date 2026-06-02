@@ -66,6 +66,7 @@ import poct.device.app.ui.report.ReportMain
 import poct.device.app.ui.report.ReportPDF
 import poct.device.app.ui.sample.SampleSerial
 import poct.device.app.ui.setting.SettingMain
+import poct.device.app.ui.setting.TemporaryOperation
 import poct.device.app.ui.single.SingleLogin
 import poct.device.app.ui.single.SingleSplash
 import poct.device.app.ui.sysconfig.SysConfigDateTime
@@ -597,6 +598,7 @@ fun NavGraphBuilder.homeNav(navController: NavController) {
 fun NavGraphBuilder.settingNav(navController: NavController) {
     navigation(startDestination = RouteConfig.SETTING_MAIN, route = RouteConfig.SETTING) {
         composable(RouteConfig.SETTING_MAIN) { SettingMain(navController = navController) }
+        composable(RouteConfig.TEMP_OPERATION) { TemporaryOperation(navController = navController) }
     }
 }
 
@@ -659,7 +661,6 @@ fun NavGraphBuilder.sysConfigNav(navController: NavController) {
         composable(RouteConfig.SYS_CONFIG_SCANNER_LIST) { SysConfigScannerList(navController = navController) }
     }
 }
-
 
 
 

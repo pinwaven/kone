@@ -23,6 +23,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -79,6 +80,7 @@ fun SysFunApiTest(navController: NavController) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var state by remember { mutableStateOf<TestState>(TestState.Idle) }
     var upgradeState by remember { mutableStateOf<UpgradeCheckState>(UpgradeCheckState.Idle) }
+    val nanoEnvironment by AppParams.runtimeModeState.nanoEnvironment.collectAsState()
 
     LaunchedEffect(Unit) {
         config = SysConfigService.findBean(ConfigSysBean.PREFIX, ConfigSysBean::class)
@@ -147,7 +149,7 @@ fun SysFunApiTest(navController: NavController) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             InfoRow(
                                 label = stringResource(id = R.string.sys_fun_api_test_url),
-                                value = AppParams.NANO_BASE_URL,
+                                value = nanoEnvironment.baseUrl,
                             )
                             Spacer(Modifier.height(8.dp))
                             InfoRow(

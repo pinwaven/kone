@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -73,6 +75,7 @@ fun AppTopBar(
     onBack: () -> Unit = { navController.popBackStack() },
     onDetail: () -> Unit = {},
     trailingContent: (@Composable () -> Unit)? = null,
+    showNanoEnvironmentBadge: Boolean = false,
     viewModel: AppTopBarViewModel = viewModel(),
 ) {
     val wifiConnected by viewModel.wifiConnected.collectAsState()
@@ -102,6 +105,7 @@ fun AppTopBar(
             onBack = { onBack() },
             onDetail = { onDetail() },
             trailingContent = trailingContent,
+            showNanoEnvironmentBadge = showNanoEnvironmentBadge,
         )
     }
 }
@@ -207,6 +211,7 @@ private fun AppTopBarTitleBlock(
     onBack: () -> Unit,
     onDetail: () -> Unit,
     trailingContent: (@Composable () -> Unit)? = null,
+    showNanoEnvironmentBadge: Boolean = false,
 ) {
     Row(
         modifier = Modifier
@@ -274,7 +279,9 @@ private fun AppTopBarTitleBlock(
 
         // 右边操作
         Row(
-            modifier = Modifier.fillMaxHeight(),
+            modifier = Modifier
+                .fillMaxHeight()
+                .weight(1f),
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -294,11 +301,39 @@ private fun AppTopBarTitleBlock(
                     }
                 )
             }
+            if (showNanoEnvironmentBadge) {
+                AppTopBarNanoEnvironmentBadge()
+            }
             if (trailingContent != null) {
                 trailingContent()
             }
         }
     }
+}
+
+@Composable
+private fun AppTopBarNanoEnvironmentBadge() {
+    val environment by AppParams.runtimeModeState.nanoEnvironment.collectAsState()
+    if (environment == poct.device.app.state.RuntimeModeState.NanoEnvironment.PRODUCTION) {
+        return
+    }
+    Text(
+        modifier = Modifier
+            .padding(end = 12.dp)
+            .width(88.dp)
+            .background(
+                color = Color(0xFF1677FF),
+                shape = RoundedCornerShape(14.dp)
+            )
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        text = "${environment.label}环境",
+        color = Color.White,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Bold,
+        textAlign = TextAlign.Center,
+        maxLines = 1,
+        softWrap = false,
+    )
 }
 
 @Composable
@@ -439,4 +474,3 @@ fun AppTopBarPreview(viewModel: AppTopBarViewModel = viewModel()) {
         )
     }
 }
-

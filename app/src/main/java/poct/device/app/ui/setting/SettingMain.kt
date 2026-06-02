@@ -10,34 +10,54 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import poct.device.app.App
 import poct.device.app.BuildConfig
 import poct.device.app.AppParams
 import poct.device.app.R
 import poct.device.app.RouteConfig
+import poct.device.app.component.AppFilledButton
 import poct.device.app.component.AppMenuCard
 import poct.device.app.component.AppMenuCardItem
+import poct.device.app.component.AppOutlinedButton
 import poct.device.app.component.AppPreviewWrapper
 import poct.device.app.component.AppScaffold
+import poct.device.app.component.AppTextField
 import poct.device.app.component.AppTopBar
 import poct.device.app.component.AppViewWrapper
 import poct.device.app.entity.User
 import poct.device.app.state.ViewState
 import poct.device.app.theme.bgColor
+import poct.device.app.theme.fontColor
 import poct.device.app.ui.home.HomeWorkPre
+import poct.device.app.utils.app.AppToastUtil
 
 /**
  * 页面定义
@@ -64,6 +84,7 @@ fun SettingMain(
                     navController = navController,
                     title = "",
                     homeEnabled = true,
+                    showNanoEnvironmentBadge = true,
                 )
             },
         ) {
@@ -89,6 +110,8 @@ fun SettingMainBody(
     viewModel: SettingMainViewModel
 ) {
     val workPreVisible = viewModel.workPreVisible.collectAsState()
+    var factoryTestPasswordVisible by remember { mutableStateOf(false) }
+    var factoryTestPassword by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -183,10 +206,15 @@ fun SettingMainBody(
                 if (AppParams.curUser.role != User.ROLE_CHECKER) {
                     AppMenuCardItem(
                         navController = navController,
-                        label = stringResource(id = R.string.after_sale_temp),
-                        painter = painterResource(id = R.mipmap.lscz_icon),
+                        label = stringResource(id = R.string.factory_test),
+                        painter = painterResource(id = R.mipmap.jcjdjz_icon),
                         onClick = {
-                            navController.navigate(RouteConfig.SAMPLE_SERIAL)
+                            if (AppParams.runtimeModeState.isFactoryTestUnlocked()) {
+                                navController.navigate(RouteConfig.SAMPLE_SERIAL)
+                            } else {
+                                factoryTestPassword = ""
+                                factoryTestPasswordVisible = true
+                            }
                         }
                     )
                 }
@@ -198,6 +226,40 @@ fun SettingMainBody(
                         viewModel.workPreVisible.value = false
                     }
                 )
+                FactoryTestPasswordDialog(
+                    visible = factoryTestPasswordVisible,
+                    password = factoryTestPassword,
+                    onPasswordChange = { factoryTestPassword = it.filter(Char::isDigit).take(16) },
+                    onCancel = {
+                        factoryTestPasswordVisible = false
+                        factoryTestPassword = ""
+                    },
+                    onConfirm = {
+                        if (AppParams.runtimeModeState.unlockFactoryTest(factoryTestPassword)) {
+                            factoryTestPasswordVisible = false
+                            factoryTestPassword = ""
+                            navController.navigate(RouteConfig.SAMPLE_SERIAL)
+                        } else {
+                            AppToastUtil.shortShow(App.getContext().getString(R.string.msg_wrong_password))
+                        }
+                    }
+                )
+            }
+            if (AppParams.curUser.role != User.ROLE_CHECKER) {
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    AppMenuCardItem(
+                        navController = navController,
+                        label = stringResource(id = R.string.after_sale_temp),
+                        painter = painterResource(id = R.mipmap.lscz_icon),
+                        onClick = { navController.navigate(RouteConfig.TEMP_OPERATION) }
+                    )
+                    AppMenuCardItem(navController = navController, label = "")
+                    AppMenuCardItem(navController = navController, label = "")
+                }
             }
             Spacer(modifier = Modifier.height(20.dp))
         }
@@ -211,6 +273,85 @@ fun SettingMainBody(
                 color = Color.Gray,
                 fontSize = 14.sp
             )
+        }
+    }
+}
+
+@Composable
+private fun FactoryTestPasswordDialog(
+    visible: Boolean,
+    password: String,
+    onPasswordChange: (String) -> Unit,
+    onCancel: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    if (!visible) {
+        return
+    }
+    Dialog(
+        onDismissRequest = onCancel,
+        properties = DialogProperties(dismissOnClickOutside = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .width(280.dp)
+                .height(190.dp),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(start = 15.dp, end = 15.dp, top = 24.dp, bottom = 20.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = fontColor,
+                    text = stringResource(id = R.string.confirm_password_title)
+                )
+                Text(
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    fontSize = 14.sp,
+                    color = fontColor,
+                    text = stringResource(id = R.string.factory_test_password_content)
+                )
+                Row(modifier = Modifier.height(36.dp)) {
+                    AppTextField(
+                        value = password,
+                        focusState = true,
+                        borderWidth = 1.dp,
+                        placeHolder = stringResource(id = R.string.confirm_password_pwd),
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        onValueChange = onPasswordChange
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    AppOutlinedButton(
+                        modifier = Modifier
+                            .width(120.dp)
+                            .height(36.dp),
+                        onClick = onCancel,
+                        text = stringResource(id = R.string.btn_label_cancel),
+                        fontSize = 14.sp
+                    )
+                    AppFilledButton(
+                        modifier = Modifier
+                            .width(120.dp)
+                            .height(36.dp),
+                        onClick = onConfirm,
+                        text = stringResource(id = R.string.btn_label_ok),
+                        fontSize = 14.sp,
+                    )
+                }
+            }
         }
     }
 }

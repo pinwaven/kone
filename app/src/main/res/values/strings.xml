@@ -112,6 +112,8 @@
     <string name="home_work_pre_init_ing">正在初始化，请稍后…</string>
     <string name="home_work_pre_init_done">初始化完成，请放心使用</string>
     <string name="home_work_pre_init_failed">初始化失败，请稍后再试</string>
+    <string name="home_start_detection">开始检测</string>
+    <string name="home_venue_detection">会场检测</string>
 
 
     <string name="work_main">样本检测</string>
@@ -182,6 +184,9 @@
     <string name="work_report_gen">生成报告</string>
     <string name="work_report_exit">退出检测</string>
     <string name="work_report_continue">继续检测</string>
+    <string name="venue_continue_detection">插入下一张</string>
+    <string name="venue_exit_mode">退出会场模式</string>
+    <string name="venue_continue_confirm">是否更换芯片卡？</string>
     <string name="work_report_print">打印报告</string>
     <string name="work_report_check_scope">斜率校验不通过</string>
     <string name="work_report_check_error">请更换芯片重新测试</string>
@@ -449,6 +454,9 @@
     <string name="after_sale_my_service">我的服务</string>
     <string name="after_sale_sun_login">远程控制</string>
     <string name="after_sale_temp">临时操作</string>
+    <string name="factory_test">工厂测试</string>
+    <string name="factory_test_password_content">请输入工厂测试密码</string>
+    <string name="venue_mode">会场模式</string>
     <string name="after_sale_sun_upgrade">远程控制</string>
     <string name="after_sale_version_upgrade">版本更新</string>
     <string name="after_sale_version_history">历史记录</string>

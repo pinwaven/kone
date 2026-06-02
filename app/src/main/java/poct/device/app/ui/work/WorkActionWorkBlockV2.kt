@@ -32,6 +32,7 @@ import kotlinx.coroutines.delay
 import poct.device.app.App
 import poct.device.app.R
 import poct.device.app.bean.card.CardConfig
+import poct.device.app.component.AppViewLoading
 import poct.device.app.component.AppVideoPlayer
 import poct.device.app.theme.bgColor
 import poct.device.app.theme.fontColor
@@ -40,8 +41,18 @@ import poct.device.app.theme.fontColor
 @Composable
 fun WorkMainActionWorkBlockV2(
     cardConfigBean: State<CardConfig>,
+    skipCutOff2Wait: Boolean = false,
+    onSkipCutOff2Wait: () -> Unit = {},
     onCutOff2TimeFinished: () -> Unit = {}
 ) {
+    if (skipCutOff2Wait) {
+        LaunchedEffect(Unit) {
+            onSkipCutOff2Wait()
+        }
+        AppViewLoading(msg = stringResource(id = R.string.work_ing_step5))
+        return
+    }
+
     // 秒
     var cutOff2Time by remember { mutableDoubleStateOf(cardConfigBean.value.cutOff2) }
 

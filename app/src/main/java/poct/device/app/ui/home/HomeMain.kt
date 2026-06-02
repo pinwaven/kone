@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -19,13 +20,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
@@ -57,7 +63,8 @@ fun HomeMain(
                 navController = navController,
                 title = LocalContext.current.getString(R.string.home),
                 homeEnabled = false,
-                loginInfoEnabled = false
+                loginInfoEnabled = false,
+                showNanoEnvironmentBadge = true
             )
         }
     ) {
@@ -148,10 +155,18 @@ fun HomeMainBody(
 
             // 样本检测
             var workPreVisible by remember { mutableStateOf(false) }
+            val venueModeEnabled by AppParams.runtimeModeState.venueModeEnabled.collectAsState()
             HomeMainEntry(
                 painterResource(id = R.mipmap.home_btn),
+                label = stringResource(
+                    id = if (venueModeEnabled) {
+                        R.string.home_venue_detection
+                    } else {
+                        R.string.home_start_detection
+                    }
+                ),
                 onClick = {
-                    if (AppParams.initState) {
+                    if (AppParams.initState || AppParams.runtimeModeState.shouldSkipHomeVenueWait()) {
                         App.getSerialHelper().reconnect()
                         navController.navigate(RouteConfig.WORK)
 
@@ -166,6 +181,7 @@ fun HomeMainBody(
                 visible = workPreVisible,
                 onClose = { workPreVisible = false },
                 onOk = {
+                    AppParams.runtimeModeState.markHomeVenueDetectionWaitComplete()
                     workPreVisible = false
 
                     // TODO 优化体验感
@@ -190,15 +206,27 @@ fun HomeMainBody(
 }
 
 @Composable
-private fun HomeMainEntry(painter: Painter, onClick: () -> Unit) {
-    Image(
-        painter = painter,
+private fun HomeMainEntry(painter: Painter, label: String, onClick: () -> Unit) {
+    Box(
         modifier = Modifier
             .padding(start = 22.dp, end = 22.dp)
             .clickable { onClick() },
-        contentDescription = "",
-        contentScale = ContentScale.FillBounds
-    )
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painter,
+            contentDescription = "",
+            contentScale = ContentScale.FillBounds
+        )
+        Text(
+            modifier = Modifier.padding(horizontal = 24.dp),
+            text = label,
+            color = Color.White,
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+    }
 }
 
 @Preview

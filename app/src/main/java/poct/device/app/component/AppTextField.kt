@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +36,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import kotlinx.coroutines.delay
 import poct.device.app.R
 import poct.device.app.state.FieldState
 import poct.device.app.theme.bgColor
@@ -78,8 +81,18 @@ fun AppTextField(
     }
     // 自动聚焦
     val focusRequester = remember { FocusRequester() }
-    if (focusState) {
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val textFieldModifier = if (focusState) {
         containerModifier.focusRequester(focusRequester)
+    } else {
+        containerModifier
+    }
+    if (focusState) {
+        LaunchedEffect(focusState) {
+            delay(100)
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
     }
     // readonly属性有BUG，切换时会报异常，所以只读时换掉输入框
     if (readOnly) {
@@ -98,7 +111,7 @@ fun AppTextField(
 
     BasicTextField(
         value = value,
-        modifier = containerModifier,
+        modifier = textFieldModifier,
         singleLine = singleLine,
         enabled = enabled,
         visualTransformation = visualTransformation,

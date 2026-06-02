@@ -34,6 +34,7 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import poct.device.app.AppParams
 import poct.device.app.R
 import poct.device.app.RouteConfig
 import poct.device.app.bean.CaseBean
@@ -79,6 +80,8 @@ fun WorkMain(navController: NavController, viewModel: WorkMainViewModel = viewMo
     // 试剂卡配置
     val checkStep = viewModel.checkStep.collectAsState()
     val sysConfig = viewModel.sysConfig.collectAsState()
+    val venueModeEnabled = AppParams.runtimeModeState.venueModeEnabled.collectAsState()
+    val skipCurrentCutOff2Wait = viewModel.skipCurrentCutOff2Wait.collectAsState()
 
     val curCardConfig = viewModel.curCardConfig.collectAsState()
     LaunchedEffect(viewState) {
@@ -99,6 +102,19 @@ fun WorkMain(navController: NavController, viewModel: WorkMainViewModel = viewMo
         }
     }
     var waitVisible by remember { mutableStateOf(true) }
+    var venueContinueConfirmVisible by remember { mutableStateOf(false) }
+    fun handleHomeClick() {
+        Timber.w("=========首页返回=========")
+        if (
+            actionValue.value == WorkMainViewModel.ACTION_CASE_WAIT
+            || actionValue.value == WorkMainViewModel.ACTION_WORK
+            || actionValue.value == WorkMainViewModel.ACTION_WORK_WAIT
+        ) {
+            viewModel.onActionWorkOutConfirm()
+        } else {
+            viewModel.onExitConfirm()
+        }
+    }
     LaunchedEffect(Unit) {
         while (true) {
             delay(1000) // 闪烁间隔时间
@@ -113,16 +129,7 @@ fun WorkMain(navController: NavController, viewModel: WorkMainViewModel = viewMo
                     title = stringResource(id = R.string.work_main),
                     homeEnabled = true,
                     onHome = {
-                        Timber.w("=========首页返回=========")
-                        if (
-                            actionValue.value == WorkMainViewModel.ACTION_CASE_WAIT
-                            || actionValue.value == WorkMainViewModel.ACTION_WORK
-                            || actionValue.value == WorkMainViewModel.ACTION_WORK_WAIT
-                        ) {
-                            viewModel.onActionWorkOutConfirm()
-                        } else {
-                            viewModel.onExitConfirm()
-                        }
+                        handleHomeClick()
                     },
                     trailingContent = if (sysConfig.value.flow == "nano") ({
                         Text(
@@ -185,6 +192,8 @@ fun WorkMain(navController: NavController, viewModel: WorkMainViewModel = viewMo
                     waitProgress,
                     waitVisible,
                     checkStep,
+                    venueModeEnabled,
+                    skipCurrentCutOff2Wait,
                     onDataDetail = {
                         viewModel.onDataDetail(bean.value) {
                             navController.navigate(RouteConfig.REPORT_DETAIL)
@@ -194,7 +203,12 @@ fun WorkMain(navController: NavController, viewModel: WorkMainViewModel = viewMo
                         viewModel.onActionReportGet()
                     },
                     onBeanUpdate = { viewModel.onBeanUpdate(it) },
-                    onUpload = { viewModel.uploadReport(bean.value) }
+                    onUpload = { viewModel.uploadReport(bean.value) },
+                    onVenueContinueClick = { venueContinueConfirmVisible = true },
+                    onVenueExitClick = {
+                        AppParams.runtimeModeState.setVenueModeEnabled(false)
+                        handleHomeClick()
+                    }
                 )
             }
         )
@@ -230,6 +244,17 @@ fun WorkMain(navController: NavController, viewModel: WorkMainViewModel = viewMo
                 }
             }
         },
+    )
+
+    AppConfirm(
+        title = stringResource(id = R.string.confirm_title_remind),
+        visible = venueContinueConfirmVisible,
+        content = stringResource(id = R.string.venue_continue_confirm),
+        onCancel = { venueContinueConfirmVisible = false },
+        onConfirm = {
+            venueContinueConfirmVisible = false
+            viewModel.onVenueModeReportContinue()
+        }
     )
 }
 
@@ -347,10 +372,14 @@ fun WorkMainBody(
     waitProgress: State<Float>,
     waitVisible: Boolean,
     checkStep: State<Int>,
+    venueModeEnabled: State<Boolean>,
+    skipCurrentCutOff2Wait: State<Boolean>,
     onDataDetail: () -> Unit,
     onReportGet: () -> Unit,
     onBeanUpdate: (newBean: CaseBean) -> Unit,
     onUpload: (CaseBean) -> Unit,
+    onVenueContinueClick: () -> Unit,
+    onVenueExitClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -398,6 +427,8 @@ fun WorkMainBody(
 //            )
             WorkMainViewModel.ACTION_WORK -> WorkMainActionWorkBlockV2(
                 cardConfigBean,
+                skipCutOff2Wait = skipCurrentCutOff2Wait.value,
+                onSkipCutOff2Wait = { viewModel.onSkipCutOff2WaitAndStartDetection() },
             ) { viewModel.onCutOff2TimeFinished() }
 
             WorkMainViewModel.ACTION_WORK_PROCESS
@@ -415,7 +446,14 @@ fun WorkMainBody(
                 if (sysConfig.value.flow == "nano") {
                     val nanoReport = viewModel.nanoReport.collectAsState()
                     val nanoChipKeys = viewModel.nanoChipKeys.collectAsState()
-                    WorkActionNanoReportBlock(bean, nanoReport, nanoChipKeys)
+                    WorkActionNanoReportBlock(
+                        bean,
+                        nanoReport,
+                        nanoChipKeys,
+                        showVenueContinueButton = venueModeEnabled.value,
+                        onVenueContinueClick = onVenueContinueClick,
+                        onVenueExitClick = onVenueExitClick,
+                    )
                 } else {
                     WorkActionReport1Block(
                         bean,
@@ -423,6 +461,9 @@ fun WorkMainBody(
                         onReportGet,
                         onBeanUpdate,
                         onUpload,
+                        showVenueContinueButton = venueModeEnabled.value,
+                        onVenueContinueClick = onVenueContinueClick,
+                        onVenueExitClick = onVenueExitClick,
                     )
                 }
             }

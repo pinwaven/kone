@@ -45,7 +45,7 @@ object NanoApi {
     private suspend fun config(): ConfigSysBean =
         SysConfigService.findBean(ConfigSysBean.PREFIX, ConfigSysBean::class)
 
-    private fun baseUrl(): String = AppParams.NANO_BASE_URL.trimEnd('/')
+    private fun baseUrl(): String = AppParams.runtimeModeState.nanoBaseUrl().trimEnd('/')
 
     private fun apiToken(): String = AppParams.NANO_API_TOKEN
 

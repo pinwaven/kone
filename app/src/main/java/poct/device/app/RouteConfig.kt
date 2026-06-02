@@ -13,6 +13,7 @@ object RouteConfig {
 
     const val SETTING = "setting"
     const val SETTING_MAIN = "$SETTING/main"
+    const val TEMP_OPERATION = "$SETTING/tempOperation"
 
     const val WORK = "work"
     const val WORK_MAIN = "$WORK/main"

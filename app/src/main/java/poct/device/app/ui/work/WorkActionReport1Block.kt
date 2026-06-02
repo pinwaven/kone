@@ -44,6 +44,7 @@ import poct.device.app.bean.CaseBean
 import poct.device.app.component.AppDivider
 import poct.device.app.component.AppFieldWrapper
 import poct.device.app.component.AppFilledButton
+import poct.device.app.component.AppOutlinedButton
 import poct.device.app.theme.bgColor
 import poct.device.app.theme.endColor
 import poct.device.app.theme.primaryColor
@@ -71,6 +72,9 @@ fun WorkActionReport1Block(
     onReportGet: () -> Unit,
     onBeanUpdate: (newBean: CaseBean) -> Unit,
     onUpload: (CaseBean) -> Unit,
+    showVenueContinueButton: Boolean = false,
+    onVenueContinueClick: () -> Unit = {},
+    onVenueExitClick: () -> Unit = {},
 ) {
     val labelWidth = 72.dp
 
@@ -603,6 +607,31 @@ fun WorkActionReport1Block(
                         }
                     }
                     Spacer(modifier = Modifier.height(15.dp))
+                    if (showVenueContinueButton) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            AppOutlinedButton(
+                                modifier = Modifier
+                                    .width(150.dp)
+                                    .height(40.dp),
+                                text = stringResource(id = R.string.venue_exit_mode),
+                                fontSize = 14.sp,
+                                onClick = onVenueExitClick,
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            AppFilledButton(
+                                modifier = Modifier
+                                    .width(150.dp)
+                                    .height(40.dp),
+                                text = stringResource(id = R.string.venue_continue_detection),
+                                fontSize = 14.sp,
+                                onClick = onVenueContinueClick,
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(15.dp))
+                    }
                     // TODO 简化信息
 //                    // 获取当前用户角色
 //                    if (AppParams.curUser.role != User.ROLE_CHECKER) {
@@ -1058,4 +1087,3 @@ fun HomeWorkActionReport1BlockPreview(viewModel: WorkMainViewModel = viewModel()
         onUpload = { viewModel.uploadReport(bean.value) },
     )
 }
-
