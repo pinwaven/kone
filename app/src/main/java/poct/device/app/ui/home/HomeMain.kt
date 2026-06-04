@@ -157,12 +157,11 @@ fun HomeMainBody(
             var workPreVisible by remember { mutableStateOf(false) }
             val venueModeEnabled by AppParams.runtimeModeState.venueModeEnabled.collectAsState()
             HomeMainEntry(
-                painterResource(id = R.mipmap.home_btn),
-                label = stringResource(
+                painter = painterResource(
                     id = if (venueModeEnabled) {
-                        R.string.home_venue_detection
+                        R.mipmap.venue_btn
                     } else {
-                        R.string.home_start_detection
+                        R.mipmap.home_btn
                     }
                 ),
                 onClick = {
@@ -206,7 +205,7 @@ fun HomeMainBody(
 }
 
 @Composable
-private fun HomeMainEntry(painter: Painter, label: String, onClick: () -> Unit) {
+private fun HomeMainEntry(painter: Painter, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .padding(start = 22.dp, end = 22.dp)
@@ -217,14 +216,6 @@ private fun HomeMainEntry(painter: Painter, label: String, onClick: () -> Unit) 
             painter = painter,
             contentDescription = "",
             contentScale = ContentScale.FillBounds
-        )
-        Text(
-            modifier = Modifier.padding(horizontal = 24.dp),
-            text = label,
-            color = Color.White,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
         )
     }
 }

@@ -286,3 +286,190 @@
 2. **Branching based on scan results:**
    - **New Card:** `Get User Chip Scan Results` -> `Update Chip Status (checking)` -> `Update User Chip Test Results` -> `Get Biological Age Assessment Report (AI-assisted)` -> `Update Chip Status (success)`
    - **Already Tested Card:** `Get User Chip Scan Results` -> `Get Biological Age Assessment Report (AI-assisted)`
+
+---
+
+## nano-api: Waven Nano AI Backend Interfaces
+
+Thin client interface for the Waven Nano AI backend (running on Aliyun FC 3.0). It is activated when `ConfigSysBean.flow == "nano"`.
+
+### Domain Environments
+- **Production (Default):** `https://nano.fros.cc`
+- **Development:** `https://nano-dev.fros.cc`
+- **Test:** `https://nano-test.fros.cc`
+- *Note: Base URL is dynamic and can be customized by售后/administrators in Settings.*
+
+### Authentication Headers
+- `Authorization: Bearer <NANO_API_TOKEN>`
+
+### Endpoints
+
+#### 1) Worker Node Connectivity Probe (Ping)
+- **Method / Function:** `GET` / `probe()`
+- **Path:** `/api/kino-chip?chip_id=__ping__`
+- **Description:** Hit by client to verify connectivity, latency, and Bearer Token validity.
+- **Request:**
+  - Query parameter: `chip_id=__ping__`
+- **Response:**
+  - HTTP 200 response indicating a successful parse by the worker node:
+  ```json
+  {
+    "found": false
+  }
+  ```
+
+#### 2) Get Reagent Chip Config Info
+- **Method / Function:** `GET` / `getChip(chipId: String)`
+- **Path:** `/api/kino-chip?chip_id={chipId}`
+- **Description:** Pulls reagent chip physical channel scanning metadata, limits, validity, and patient bindings by card code.
+- **Request:**
+  - Query parameter: `chip_id=BatchNumber-CardNumber` (URL encoded)
+- **Response:**
+  ```json
+  {
+    "found": true,
+    "used": false,
+    "scan_id": 12345,
+    "user_id": "User OpenID",
+    "nickname": "User Nickname",
+    "birth_date": "1990-01-01",
+    "chrono_age": 36,
+    "gender": "male",
+    "scan_status": "success",
+    "model": "Kino-Model-V1",
+    "biomarker_keys": ["CRP", "HbA1c"],
+    "guide_video": "https://example.com/video.mp4",
+    "guide_text": "Insert chip carefully",
+    "chip_config": {
+      "scan_ppmm": 10,
+      "top_list": [
+        {
+          "id": "item-1",
+          "index": 0,
+          "start": 0.0,
+          "end": 0.0,
+          "ctrl": "n",
+          "name": "CRP"
+        }
+      ],
+      "var_list": [
+        {
+          "id": "formula-1",
+          "index": 0,
+          "start": 0.0,
+          "end": 0.0,
+          "x0": 0.0,
+          "x1": 0.0
+        }
+      ],
+      "ft0": 0,
+      "xt1": 0,
+      "ft1": 0,
+      "scope": 0.0,
+      "type_score": 1.0,
+      "c_avg": 0.0,
+      "c_std": 0.0,
+      "c_min": 0.0,
+      "c_max": 0.0,
+      "cut_off1": 0.0,
+      "cut_off2": 0.0,
+      "cut_off3": 0.0,
+      "cut_off4": 0.0,
+      "cut_off5": 0.0,
+      "cut_off6": 0.0,
+      "cut_off7": 0.0,
+      "cut_off8": 0.0,
+      "cut_off_max": 0.0,
+      "noise1": 0.0,
+      "noise2": 0.0,
+      "noise3": 0.0,
+      "noise4": 0.0,
+      "noise5": 0.0
+    }
+  }
+  ```
+
+#### 3) Post Biomarker Data for AI Evaluation
+- **Method / Function:** `POST` / `postBiomarkers(req: NanoBiomarkersReq)`
+- **Path:** `/api/biomarkers`
+- **Description:** Submit raw multi-channel scan signals to have AI model evaluate actual biomarker concentrations and compute biological age profiles.
+- **Request:**
+  ```json
+  {
+    "openid": "User OpenID",
+    "test_type": "kino_chip",
+    "test_data": {
+      "CRP": 1.25,
+      "HbA1c": 5.4
+    },
+    "kino_device_id": "Device Physical ID",
+    "tested_at": "2024-04-07 12:00:01"
+  }
+  ```
+- **Response:**
+  ```json
+  {
+    "success": true,
+    "user_id": "User OpenID",
+    "biomarkers": {
+      "CRP": 1.25,
+      "HbA1c": 5.4
+    },
+    "bioage_profile": {
+      "ChronoAge": 36.0,
+      "BioAge": 32.5,
+      "AgeDifference": -3.5,
+      "SubAges": {
+        "ResilienceAge": 31.2,
+        "CellularAge": 33.1,
+        "MetabolicAge": 32.0,
+        "MicroVascularAge": 33.5
+      },
+      "Scores": {
+        "total": 85.0,
+        "Resilience": 88.0,
+        "Cellular": 83.0,
+        "Metabolic": 86.0,
+        "MicroVascular": 84.0
+      }
+    }
+  }
+  ```
+
+#### 4) Post Kino Diagnostic Result
+- **Method / Function:** `POST` / `postKinoResult(req: NanoKinoResultReq)`
+- **Path:** `/api/kino-result`
+- **Description:** Submits final test summary records to cloud for patient H5/PDF report generation.
+- **Request:**
+  ```json
+  {
+    "chip_id": "BatchNumber-CardNumber",
+    "data": {
+      "CRP": 1.25,
+      "HbA1c": 5.4
+    },
+    "bio_age": 32.5,
+    "kino_device_id": "Device Physical ID"
+  }
+  ```
+- **Response:**
+  ```json
+  {
+    "success": true,
+    "biomarker_id": 123456789
+  }
+  ```
+
+#### 5) Check for Software/Firmware Upgrade
+- **Method / Function:** `GET` / `checkUpgrade()`
+- **Path:** `/api/kino-upgrade`
+- **Description:** Checks latest available client APK version and firmware URL.
+- **Request:**
+  - None (identifies using authorization token in header)
+- **Response:**
+  ```json
+  {
+    "version": "0.3.5",
+    "url": "https://poct-upgrade.virtualhealth.cn/apk/kone-0.3.5.apk"
+  }
+  ```
