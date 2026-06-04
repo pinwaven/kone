@@ -112,6 +112,11 @@ object NanoAuthSupport {
         return "${value.take(4)}...${value.takeLast(4)}"
     }
 
+    fun bearerHeader(token: String?): String? {
+        val value = token.orEmpty().trim()
+        return value.takeIf { it.isNotEmpty() }?.let { "Bearer $it" }
+    }
+
     fun redactSensitiveText(text: String?): String {
         var value = text.orEmpty()
         value = Regex(

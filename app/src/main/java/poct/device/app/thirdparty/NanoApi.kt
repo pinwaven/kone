@@ -88,7 +88,7 @@ object NanoApi {
     suspend fun deviceSerial(): String = config().nanoDeviceId
 
     private fun Request.Builder.withAuth(token: String): Request.Builder =
-        if (token.isNotEmpty()) this.header("Authorization", "Bearer $token") else this
+        NanoAuthSupport.bearerHeader(token)?.let { header("Authorization", it) } ?: this
 
     private fun protectedExecutor(base: String): NanoProtectedCallExecutor =
         NanoProtectedCallExecutor(

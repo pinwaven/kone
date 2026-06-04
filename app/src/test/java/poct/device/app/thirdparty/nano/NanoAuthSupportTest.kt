@@ -26,6 +26,26 @@ class NanoAuthSupportTest {
     }
 
     @Test
+    fun authLifecycleErrorsMapToLocalizedStringResources() {
+        assertEquals(
+            R.string.nano_auth_error_invalid_root_token,
+            NanoAuthSupport.messageResForError("invalid_root_token")
+        )
+        assertEquals(
+            R.string.nano_auth_error_machine_not_active,
+            NanoAuthSupport.messageResForError("machine_not_active")
+        )
+        assertEquals(
+            R.string.nano_auth_error_comm_token_expired,
+            NanoAuthSupport.messageResForError("comm_token_expired")
+        )
+        assertEquals(
+            R.string.nano_auth_error_backend,
+            NanoAuthSupport.messageResForError("unexpected_error")
+        )
+    }
+
+    @Test
     fun authStateKnowsWhetherActivationTokensExist() {
         assertFalse(NanoAuthState().isActivated())
 
@@ -44,6 +64,13 @@ class NanoAuthSupportTest {
         assertEquals("(empty)", NanoAuthSupport.redactToken(""))
         assertEquals("***", NanoAuthSupport.redactToken("abc"))
         assertEquals("abcd...wxyz", NanoAuthSupport.redactToken("abcdefghijklmnopqrstuvwxyz"))
+    }
+
+    @Test
+    fun bearerHeaderIsBuiltOnlyForNonBlankTokens() {
+        assertEquals("Bearer comm-token", NanoAuthSupport.bearerHeader(" comm-token "))
+        assertEquals(null, NanoAuthSupport.bearerHeader(""))
+        assertEquals(null, NanoAuthSupport.bearerHeader("   "))
     }
 
     @Test

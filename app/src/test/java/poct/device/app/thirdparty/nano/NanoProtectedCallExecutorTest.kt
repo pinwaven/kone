@@ -30,6 +30,11 @@ class NanoProtectedCallExecutorTest {
         assertTrue(result.ok)
         assertEquals("""{"found":false}""", result.body)
         assertEquals(listOf("comm-a"), transport.protectedTokens)
+        assertEquals(listOf("GET"), transport.protectedRequests.map { it.method })
+        assertEquals(
+            listOf("https://nano.test/kino/kino-chip?chip_id=abc"),
+            transport.protectedRequests.map { it.url }
+        )
         assertTrue(transport.exchangeTokens.isEmpty())
         assertEquals("comm-a", store.state.commToken)
     }
@@ -52,6 +57,13 @@ class NanoProtectedCallExecutorTest {
         assertTrue(result.ok)
         assertEquals("""{"found":true}""", result.body)
         assertEquals(listOf("expired", "fresh"), transport.protectedTokens)
+        assertEquals(
+            listOf(
+                "https://nano.test/kino/kino-chip?chip_id=abc",
+                "https://nano.test/kino/kino-chip?chip_id=abc",
+            ),
+            transport.protectedRequests.map { it.url }
+        )
         assertEquals(listOf("root-a"), transport.exchangeTokens)
         assertEquals("fresh", store.state.commToken)
         assertEquals("2026-06-05T00:00:00.000Z", store.state.commTokenExpiresAt)
@@ -146,6 +158,27 @@ class NanoProtectedCallExecutorTest {
         assertTrue(transport.exchangeTokens.isEmpty())
     }
 
+    @Test
+    fun postRequestKeepsMethodUrlAndBodyWhenExecuted() = runBlocking {
+        val store = FakeAuthStore(authState(commToken = "comm-a", rootToken = "root-a"))
+        val transport = FakeTransport(
+            NanoRawResponse(200, """{"success":true}""")
+        )
+        val executor = NanoProtectedCallExecutor(store, transport)
+        val body = """{"software_version":"0.3.0"}"""
+
+        val result = executor.execute(
+            endpointName = "kino-machines-info",
+            request = NanoProtectedRequest.post("https://nano.test/kino/kino-machines/info", body)
+        )
+
+        assertTrue(result.ok)
+        assertEquals("POST", transport.protectedRequests.single().method)
+        assertEquals("https://nano.test/kino/kino-machines/info", transport.protectedRequests.single().url)
+        assertEquals(body, transport.protectedRequests.single().body)
+        assertEquals(listOf("comm-a"), transport.protectedTokens)
+    }
+
     private fun authState(commToken: String, rootToken: String): NanoAuthState =
         NanoAuthState(
             rootToken = rootToken,
@@ -173,12 +206,14 @@ class NanoProtectedCallExecutorTest {
     ) : NanoProtectedCallExecutor.Transport {
         val protectedTokens = mutableListOf<String>()
         val exchangeTokens = mutableListOf<String>()
+        val protectedRequests = mutableListOf<NanoProtectedRequest>()
         private var index = 0
 
         override suspend fun executeProtected(
             request: NanoProtectedRequest,
             commToken: String
         ): NanoRawResponse {
+            protectedRequests += request
             protectedTokens += commToken
             return next()
         }
