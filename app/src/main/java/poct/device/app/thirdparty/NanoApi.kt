@@ -22,6 +22,8 @@ import poct.device.app.thirdparty.model.nano.NanoAuthSupport
 import poct.device.app.thirdparty.model.nano.NanoBiomarkersReq
 import poct.device.app.thirdparty.model.nano.NanoBiomarkersResp
 import poct.device.app.thirdparty.model.nano.NanoChipResp
+import poct.device.app.thirdparty.model.nano.NanoDeviceInfoSupport
+import poct.device.app.thirdparty.model.nano.NanoDeviceMeResp
 import poct.device.app.thirdparty.model.nano.NanoEndpoints
 import poct.device.app.thirdparty.model.nano.NanoKinoResultReq
 import poct.device.app.thirdparty.model.nano.NanoKinoResultResp
@@ -169,6 +171,15 @@ object NanoApi {
         val status: Int? = null,
         val error: String? = null,
         val machine: NanoMachine? = null,
+    )
+
+    data class DeviceMeResult(
+        val ok: Boolean,
+        val message: String = "",
+        val status: Int? = null,
+        val error: String? = null,
+        val machine: NanoMachine? = null,
+        val config: ConfigInfoV2Bean? = null,
     )
 
     suspend fun activateDevice(
@@ -377,6 +388,71 @@ object NanoApi {
             hardware = machine.firmwareVersion ?: requestedFirmwareVersion ?: configBean.hardware,
         )
         SysConfigService.saveBean(ConfigInfoBean.PREFIX, updated)
+    }
+
+    suspend fun getDeviceMe(): DeviceMeResult = withContext(Dispatchers.IO) {
+        val base = baseUrl()
+        if (base.isEmpty()) {
+            return@withContext DeviceMeResult(ok = false, message = "nanoBaseUrl not configured")
+        }
+        val url = NanoEndpoints.deviceMe(base)
+        try {
+            val result = executeProtected(
+                endpointName = "device-me",
+                request = NanoProtectedRequest.get(url),
+                base = base,
+            )
+            if (!result.ok) {
+                return@withContext DeviceMeResult(
+                    ok = false,
+                    status = result.status,
+                    error = result.error,
+                    message = authFacingMessage(result.error, result.message),
+                )
+            }
+
+            val parsed = App.gson.fromJson(result.body.orEmpty(), NanoDeviceMeResp::class.java)
+            if (!parsed.success) {
+                return@withContext DeviceMeResult(
+                    ok = false,
+                    status = result.status,
+                    error = parsed.error,
+                    message = authFacingMessage(parsed.error, "device-me failed: ${errorText(parsed.error)}"),
+                )
+            }
+
+            val config = NanoDeviceInfoSupport.toConfigInfo(parsed.machine)
+                ?: return@withContext DeviceMeResult(
+                    ok = false,
+                    status = result.status,
+                    error = "parse_error",
+                    message = "device-me failed: response missing machine_no or model",
+                )
+
+            updateCachedMachineInfo(
+                machine = parsed.machine!!,
+                requestedSoftwareVersion = config.software,
+                requestedFirmwareVersion = config.hardware,
+            )
+            DeviceMeResult(
+                ok = true,
+                status = result.status,
+                machine = parsed.machine,
+                config = config,
+            )
+        } catch (e: Exception) {
+            Timber.w(e, "NanoApi.getDeviceMe failed")
+            DeviceMeResult(ok = false, message = e.message ?: e.javaClass.simpleName)
+        }
+    }
+
+    private fun authFacingMessage(error: String?, fallback: String?): String {
+        return when (error) {
+            "missing_comm_token" -> "设备未激活，请先进入工厂测试 -> 设备激活"
+            "missing_root_token" -> "通信令牌已过期且缺少 root token，请重新执行设备激活"
+            "invalid_root_token", "machine_not_active", "comm_token_expired" -> errorText(error)
+            else -> fallback.orEmpty()
+        }
     }
 
     /**

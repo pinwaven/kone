@@ -2,6 +2,7 @@ package poct.device.app.thirdparty.model.nano
 
 import com.google.gson.annotations.SerializedName
 import poct.device.app.R
+import poct.device.app.bean.ConfigInfoV2Bean
 
 // ── Requests ────────────────────────────────────────────────────────────────
 
@@ -51,6 +52,12 @@ data class NanoMachineInfoReq(
 )
 
 data class NanoMachineInfoResp(
+    val success: Boolean = false,
+    val machine: NanoMachine? = null,
+    val error: String? = null,
+)
+
+data class NanoDeviceMeResp(
     val success: Boolean = false,
     val machine: NanoMachine? = null,
     val error: String? = null,
@@ -128,6 +135,21 @@ object NanoMachineInfoSupport {
     private fun String?.normalizedVersion(): String? {
         val value = orEmpty().trim()
         return if (value.length > MAX_VERSION_LENGTH) null else value
+    }
+}
+
+object NanoDeviceInfoSupport {
+    fun toConfigInfo(machine: NanoMachine?): ConfigInfoV2Bean? {
+        val machineNo = machine?.machineNo.orEmpty().trim()
+        val model = machine?.model.orEmpty().trim()
+        if (machineNo.isEmpty() || model.isEmpty()) return null
+        return ConfigInfoV2Bean(
+            name = machine?.machineName.orEmpty().trim(),
+            code = machineNo,
+            type = model,
+            software = machine?.softwareVersion.orEmpty().trim(),
+            hardware = machine?.firmwareVersion.orEmpty().trim(),
+        )
     }
 }
 

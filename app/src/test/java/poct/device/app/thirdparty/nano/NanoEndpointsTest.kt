@@ -20,6 +20,7 @@ class NanoEndpointsTest {
         assertEquals("https://nano-test.fros.cc/kino/biomarkers", NanoEndpoints.biomarkers(base))
         assertEquals("https://nano-test.fros.cc/kino/kino-result", NanoEndpoints.kinoResult(base))
         assertEquals("https://nano-test.fros.cc/kino/kino-machines/info", NanoEndpoints.machineInfo(base))
+        assertEquals("https://nano-test.fros.cc/kino/device/me", NanoEndpoints.deviceMe(base))
         assertEquals("https://nano-test.fros.cc/kino/kino-upgrade", NanoEndpoints.kinoUpgrade(base))
         assertEquals("https://nano-test.fros.cc/kino/token/exchange", NanoEndpoints.tokenExchange(base))
     }

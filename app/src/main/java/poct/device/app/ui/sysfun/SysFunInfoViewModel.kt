@@ -83,10 +83,17 @@ class SysFunInfoViewModel : ViewModel() {
                     configBean
                 }
                 val upload = NanoApi.uploadLocalMachineInfo(firmwareVersion = firmwareVersion)
+                val remote = NanoApi.getDeviceMe()
                 val latestConfig =
                     SysConfigService.findBean(ConfigInfoBean.PREFIX, ConfigInfoV2Bean::class)
-                beanV2.value = if (latestConfig.hasData()) latestConfig else localConfig
-                if (!upload.ok && !upload.skipped) {
+                beanV2.value = remote.config
+                    ?: if (latestConfig.hasData()) latestConfig else localConfig
+                if (!remote.ok) {
+                    actionState.value = ActionState(
+                        event = EVT_CONTACT_ADMIN,
+                        msg = remote.message,
+                    )
+                } else if (!upload.ok && !upload.skipped) {
                     actionState.value = ActionState(
                         event = EVT_CONTACT_ADMIN,
                         msg = upload.message,

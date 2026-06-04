@@ -20,6 +20,8 @@ object NanoEndpoints {
 
     fun machineInfo(baseUrl: String): String = "${base(baseUrl)}/kino/kino-machines/info"
 
+    fun deviceMe(baseUrl: String): String = "${base(baseUrl)}/kino/device/me"
+
     fun kinoUpgrade(baseUrl: String): String = "${base(baseUrl)}/kino/kino-upgrade"
 
     fun tokenExchange(baseUrl: String): String = "${base(baseUrl)}/kino/token/exchange"
