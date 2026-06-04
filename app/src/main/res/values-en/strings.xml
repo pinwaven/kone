@@ -576,4 +576,27 @@
     <string name="nano_bm_ga">Glycated Albumin</string>
     <string name="nano_bm_cystatinc">Cystatin C</string>
     <string name="nano_bm_cd38">CD38</string>
+
+    <!-- Nano device auth -->
+    <string name="nano_auth_activate_button">Activate device</string>
+    <string name="nano_auth_activating">Activating device…</string>
+    <string name="nano_auth_base_url_missing">Nano service URL is not configured</string>
+    <string name="nano_auth_activation_token_missing">KINO_ACTIVATION_TOKEN is not configured. Device activation is unavailable.</string>
+    <string name="nano_auth_mainboard_id_missing">Failed to get mainboard_id: Android board ID is empty</string>
+    <string name="nano_auth_firmware_id_missing">Failed to get firmware_id: hardware handshake ID is empty</string>
+    <string name="nano_auth_firmware_id_missing_with_raw">Failed to get firmware_id: hardware handshake did not return a valid ID. Raw response: %s</string>
+    <string name="nano_auth_activate_http_failed">Device activation failed: HTTP %1$d, %2$s</string>
+    <string name="nano_auth_activate_parse_failed">Device activation failed: response parse failed</string>
+    <string name="nano_auth_activate_failed">Device activation failed: %s</string>
+    <string name="nano_auth_activate_missing_token_or_machine">Device activation failed: backend response is missing token or machine number</string>
+    <string name="nano_auth_activate_success">Device activated successfully: %s</string>
+    <string name="nano_auth_activate_network_failed">Device activation failed: network error %s</string>
+    <string name="nano_auth_error_firmware_id_mismatch">Hardware ID mismatch. Confirm this Android board and analyzer belong to the same bound device.</string>
+    <string name="nano_auth_error_mainboard_id_mismatch">Android board ID mismatch. Confirm this Android board and analyzer belong to the same bound device.</string>
+    <string name="nano_auth_error_no_available_machine_no">No available machine number. Create an inactive machine number in the admin backend first.</string>
+    <string name="nano_auth_error_invalid_root_token">Root token is invalid. Please activate the device again.</string>
+    <string name="nano_auth_error_machine_not_active">Device is not active or has been disabled. Please contact the administrator.</string>
+    <string name="nano_auth_error_comm_token_expired">Communication token has expired. Refresh and retry.</string>
+    <string name="nano_auth_error_unknown">Unknown error</string>
+    <string name="nano_auth_error_backend">Backend returned an error</string>
 </resources>

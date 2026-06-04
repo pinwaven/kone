@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,8 +42,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import poct.device.app.App
 import poct.device.app.AppParams
+import poct.device.app.R
 import poct.device.app.RouteConfig
-import poct.device.app.bean.ConfigInfoV2Bean
 import poct.device.app.component.AppFilledButton
 import poct.device.app.component.AppPreviewWrapper
 import poct.device.app.component.AppScaffold
@@ -53,7 +54,8 @@ import poct.device.app.theme.activeColor
 import poct.device.app.theme.filledFontColor
 import poct.device.app.theme.fontColor
 import poct.device.app.theme.inputFontColor
-import poct.device.app.thirdparty.SbEdgeFunc
+import poct.device.app.thirdparty.NanoApi
+import poct.device.app.thirdparty.model.nano.NanoAuthSupport
 import poct.device.app.utils.app.AppSystemUtils
 import timber.log.Timber
 import java.io.File
@@ -205,7 +207,7 @@ fun SampleSerial(
                             containerColor = filledFontColor
                         ),
                         onClick = { viewModel.activateDevice() }) {
-                        Text(text = "设备激活")
+                        Text(text = stringResource(id = R.string.nano_auth_activate_button))
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     Button(
@@ -368,15 +370,36 @@ class SampleSerialViewModel : ViewModel() {
 
     fun activateDevice() {
         viewModelScope.launch(Dispatchers.IO) {
-            val deviceId = App.getDeviceId()
-            val deviceConfigInfo: ConfigInfoV2Bean = SbEdgeFunc.getDeviceConfig(deviceId)
-
-            var isOk = true
-            if (deviceConfigInfo.code == SbEdgeFunc.EMPTY_VAL) {
-                isOk = SbEdgeFunc.activateDevice(deviceId)
-            }
             withContext(Dispatchers.Main) {
-                text.value = ("设备激活 $isOk")
+                text.value = App.getContext().getString(R.string.nano_auth_activating)
+            }
+            val mainboardId = App.getDeviceId().trim()
+            if (mainboardId.isEmpty()) {
+                withContext(Dispatchers.Main) {
+                    text.value = App.getContext().getString(R.string.nano_auth_mainboard_id_missing)
+                }
+                return@launch
+            }
+
+            val rawHandshake = CtlCommandsV2.readAllData(CtlCommandsV2.hi())
+            val firmwareId = NanoAuthSupport.extractFirmwareId(rawHandshake)
+            if (firmwareId.isEmpty()) {
+                withContext(Dispatchers.Main) {
+                    text.value = App.getContext().getString(
+                        R.string.nano_auth_firmware_id_missing_with_raw,
+                        rawHandshake
+                    )
+                }
+                return@launch
+            }
+
+            val result = NanoApi.activateDevice(
+                mainboardId = mainboardId,
+                firmwareId = firmwareId,
+                model = "KNA1",
+            )
+            withContext(Dispatchers.Main) {
+                text.value = result.message
             }
         }
     }

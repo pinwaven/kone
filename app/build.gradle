@@ -13,6 +13,13 @@ static def packageTime() {
 android {
     compileSdk compile_sdk_version
 
+    def kinoActivationToken = (project.findProperty("KINO_ACTIVATION_TOKEN")
+            ?: System.getenv("KINO_ACTIVATION_TOKEN")
+            ?: "").toString()
+    def escapedKinoActivationToken = kinoActivationToken
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+
     defaultConfig {
         applicationId "poct.device.app"
         minSdk min_version
@@ -25,6 +32,7 @@ android {
         vectorDrawables {
             useSupportLibrary true
         }
+        buildConfigField "String", "KINO_ACTIVATION_TOKEN", "\"${escapedKinoActivationToken}\""
 
         // 仅保留必要的ABI（减少APK大小）
         ndk {

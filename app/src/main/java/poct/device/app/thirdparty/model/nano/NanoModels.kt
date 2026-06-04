@@ -1,6 +1,7 @@
 package poct.device.app.thirdparty.model.nano
 
 import com.google.gson.annotations.SerializedName
+import poct.device.app.R
 
 // ── Requests ────────────────────────────────────────────────────────────────
 
@@ -18,6 +19,76 @@ data class NanoKinoResultReq(
     val bioAge: Double? = null,
     val kinoDeviceId: String? = null,
 )
+
+data class NanoActivateReq(
+    val mainboardId: String,
+    val firmwareId: String,
+    val model: String,
+)
+
+data class NanoMachine(
+    val id: Long? = null,
+    val machineNo: String? = null,
+    val machineName: String? = null,
+    val model: String? = null,
+    val status: String? = null,
+    val softwareVersion: String? = null,
+    val firmwareVersion: String? = null,
+)
+
+data class NanoActivateResp(
+    val success: Boolean = false,
+    val machine: NanoMachine? = null,
+    val rootToken: String? = null,
+    val commToken: String? = null,
+    val commTokenExpiresAt: String? = null,
+    val error: String? = null,
+)
+
+data class NanoAuthState(
+    val rootToken: String = "",
+    val commToken: String = "",
+    val commTokenExpiresAt: String = "",
+    val machineNo: String = "",
+    val machineName: String = "",
+    val model: String = "",
+    val status: String = "",
+    val activatedAt: String = "",
+    val refreshedAt: String = "",
+) {
+    fun isActivated(): Boolean =
+        rootToken.isNotBlank() && commToken.isNotBlank() && machineNo.isNotBlank()
+}
+
+object NanoAuthSupport {
+    fun messageResForError(error: String?): Int {
+        return when (error) {
+            "firmware_id_mismatch" -> R.string.nano_auth_error_firmware_id_mismatch
+            "mainboard_id_mismatch" -> R.string.nano_auth_error_mainboard_id_mismatch
+            "no_available_machine_no" -> R.string.nano_auth_error_no_available_machine_no
+            "invalid_root_token" -> R.string.nano_auth_error_invalid_root_token
+            "machine_not_active" -> R.string.nano_auth_error_machine_not_active
+            "comm_token_expired" -> R.string.nano_auth_error_comm_token_expired
+            null, "" -> R.string.nano_auth_error_unknown
+            else -> R.string.nano_auth_error_backend
+        }
+    }
+
+    fun redactToken(token: String?): String {
+        val value = token.orEmpty()
+        if (value.isEmpty()) return "(empty)"
+        if (value.length <= 8) return "***"
+        return "${value.take(4)}...${value.takeLast(4)}"
+    }
+
+    fun extractFirmwareId(rawHandshake: String?): String {
+        val raw = rawHandshake.orEmpty().trim()
+        if (raw.isEmpty()) return ""
+        val value = if (raw.contains("ver:")) raw.substringAfter("ver:") else raw
+        val firmware = value.trim().lineSequence().firstOrNull().orEmpty().trim()
+        return firmware.substringAfter("~", firmware).trim()
+    }
+}
 
 // ── GET /api/kino-chip response ─────────────────────────────────────────────
 //

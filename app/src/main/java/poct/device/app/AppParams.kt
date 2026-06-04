@@ -86,4 +86,6 @@ object AppParams {
      */
     const val NANO_BASE_URL  = "https://nano.fros.cc"
     const val NANO_API_TOKEN = "tokenData-gh9bc7917115bid72c68c8c4693g"
+
+    fun kinoActivationToken(): String = BuildConfig.KINO_ACTIVATION_TOKEN
 }
