@@ -19,20 +19,23 @@ import poct.device.app.thirdparty.model.nano.NanoAuthSupport
 import poct.device.app.thirdparty.model.nano.NanoBiomarkersReq
 import poct.device.app.thirdparty.model.nano.NanoBiomarkersResp
 import poct.device.app.thirdparty.model.nano.NanoChipResp
+import poct.device.app.thirdparty.model.nano.NanoEndpoints
 import poct.device.app.thirdparty.model.nano.NanoKinoResultReq
 import poct.device.app.thirdparty.model.nano.NanoKinoResultResp
-import poct.device.app.utils.common.HttpUtils
+import poct.device.app.thirdparty.model.nano.NanoProtectedCallResult
+import poct.device.app.thirdparty.model.nano.NanoProtectedCallExecutor
+import poct.device.app.thirdparty.model.nano.NanoProtectedRequest
+import poct.device.app.thirdparty.model.nano.NanoRawResponse
 import timber.log.Timber
 import java.io.IOException
-import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 /**
  * Thin client for the Waven Nano AI backend (Aliyun FC 3.0).
  * Mirrors the three calls the WeChat miniapp Kino Simulator makes:
- *   GET  /api/kino-chip?chip_id=...
- *   POST /api/biomarkers
- *   POST /api/kino-result
+ *   GET  /kino/kino-chip?chip_id=...
+ *   POST /kino/biomarkers
+ *   POST /kino/kino-result
  *
  * Active when ConfigSysBean.flow == "nano". Reads baseUrl + deviceId from
  * ConfigSysBean each call so changes in Settings take effect without restart.
@@ -45,8 +48,6 @@ object NanoApi {
     // consume it directly without re-querying (used when upgrade is triggered from SysFunApiTest).
     var pendingUpgrade: poct.device.app.thirdparty.model.nano.NanoUpgradeResp? = null
 
-    private val httpUtils = HttpUtils()
-    private val httpUtilsSlow = HttpUtils(readTimeout = 60)
     private val authClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(5, TimeUnit.SECONDS)
@@ -61,8 +62,6 @@ object NanoApi {
         SysConfigService.findBean(ConfigSysBean.PREFIX, ConfigSysBean::class)
 
     private fun baseUrl(): String = AppParams.runtimeModeState.nanoBaseUrl().trimEnd('/')
-
-    private fun apiToken(): String = AppParams.NANO_API_TOKEN
 
     private fun activationToken(): String = AppParams.kinoActivationToken().trim()
 
@@ -82,6 +81,63 @@ object NanoApi {
 
     private fun Request.Builder.withAuth(token: String): Request.Builder =
         if (token.isNotEmpty()) this.header("Authorization", "Bearer $token") else this
+
+    private fun protectedExecutor(base: String): NanoProtectedCallExecutor =
+        NanoProtectedCallExecutor(
+            authStore = object : NanoProtectedCallExecutor.AuthStore {
+                override suspend fun load(): NanoAuthState = NanoAuthStore.load()
+
+                override suspend fun save(state: NanoAuthState) {
+                    NanoAuthStore.save(state)
+                }
+            },
+            transport = object : NanoProtectedCallExecutor.Transport {
+                override suspend fun executeProtected(
+                    request: NanoProtectedRequest,
+                    commToken: String,
+                ): NanoRawResponse = executeNanoRequest(request, commToken)
+
+                override suspend fun exchangeToken(rootToken: String): NanoRawResponse {
+                    val request = NanoProtectedRequest.post(NanoEndpoints.tokenExchange(base), "{}")
+                    return executeNanoRequest(request, rootToken)
+                }
+            },
+            gson = App.gson,
+        )
+
+    private fun executeNanoRequest(request: NanoProtectedRequest, token: String): NanoRawResponse {
+        val builder = Request.Builder()
+            .url(request.url)
+            .withAuth(token)
+        val okHttpRequest = when (request.method) {
+            "POST" -> builder.post(request.body.orEmpty().toRequestBody(JSON)).build()
+            else -> builder.get().build()
+        }
+        authClient.newCall(okHttpRequest).execute().use { response ->
+            return NanoRawResponse(
+                status = response.code,
+                body = response.body?.string().orEmpty(),
+            )
+        }
+    }
+
+    private suspend fun executeProtected(
+        endpointName: String,
+        request: NanoProtectedRequest,
+        base: String,
+    ): NanoProtectedCallResult =
+        protectedExecutor(base).execute(endpointName, request).let { result ->
+            if (!result.ok) {
+                Timber.w(
+                    "NanoApi.%s failed: status=%s error=%s message=%s",
+                    endpointName,
+                    result.status,
+                    result.error,
+                    result.message,
+                )
+            }
+            result
+        }
 
     data class ActivationResult(
         val ok: Boolean,
@@ -213,7 +269,7 @@ object NanoApi {
     }
 
     /**
-     * Hit `${nanoBaseUrl}/api/kino-chip?chip_id=__ping__` and return a structured
+     * Hit `${nanoBaseUrl}/kino/kino-chip?chip_id=__ping__` and return a structured
      * result. The endpoint exists in the nano worker and responds with
      * `{"found":false}` (HTTP 200) for unknown chips — that proves both reachability
      * and that the request was parsed by the worker, not just that DNS resolved.
@@ -223,24 +279,18 @@ object NanoApi {
         if (base.isEmpty()) {
             return@withContext ProbeResult(ok = false, url = "", error = "nanoBaseUrl not configured")
         }
-        val url = "$base/api/kino-chip?chip_id=__ping__"
+        val url = NanoEndpoints.probe(base)
         val start = System.currentTimeMillis()
         try {
-            val client = httpUtils.buildClient()
-            val request = Request.Builder().url(url).withAuth(apiToken()).get().build()
-            client.newCall(request).execute().use { response ->
-                val latency = System.currentTimeMillis() - start
-                val body = response.body?.string()?.take(500)
-                val ok = response.isSuccessful
-                ProbeResult(
-                    ok = ok,
-                    url = url,
-                    status = response.code,
-                    latencyMs = latency,
-                    body = body,
-                    error = if (!ok) "HTTP ${response.code}" else null,
-                )
-            }
+            val result = executeProtected("kino-chip", NanoProtectedRequest.get(url), base)
+            ProbeResult(
+                ok = result.ok,
+                url = url,
+                status = result.status,
+                latencyMs = System.currentTimeMillis() - start,
+                body = result.body?.take(500),
+                error = result.error ?: if (!result.ok) result.message else null,
+            )
         } catch (e: Exception) {
             ProbeResult(
                 ok = false,
@@ -257,10 +307,10 @@ object NanoApi {
             Timber.w("NanoApi.getChip: nanoBaseUrl not configured")
             return@withContext null
         }
-        val url = "$base/api/kino-chip?chip_id=${URLEncoder.encode(chipId, "UTF-8")}"
+        val url = NanoEndpoints.kinoChip(base, chipId)
         try {
-            val request = Request.Builder().url(url).withAuth(apiToken()).get().build()
-            val body = httpUtils.executeRequest(request)
+            val result = executeProtected("kino-chip", NanoProtectedRequest.get(url), base)
+            val body = result.body ?: return@withContext null
             App.gson.fromJson(body, NanoChipResp::class.java)
         } catch (e: IOException) {
             Timber.w(e, "NanoApi.getChip failed")
@@ -277,16 +327,12 @@ object NanoApi {
             Timber.w("NanoApi.postBiomarkers: nanoBaseUrl not configured")
             return@withContext null
         }
-        val url = "$base/api/biomarkers"
+        val url = NanoEndpoints.biomarkers(base)
         try {
             val jsonBody = App.gson.toJson(req)
-            Timber.w("NanoApi.postBiomarkers req=$jsonBody")
-            val request = Request.Builder()
-                .url(url)
-                .withAuth(apiToken())
-                .post(jsonBody.toRequestBody(JSON))
-                .build()
-            val body = httpUtilsSlow.executeRequest(request)
+            Timber.w("NanoApi.postBiomarkers request prepared")
+            val result = executeProtected("biomarkers", NanoProtectedRequest.post(url, jsonBody), base)
+            val body = result.body ?: return@withContext null
             Timber.w("NanoApi.postBiomarkers resp=$body")
             App.gson.fromJson(body, NanoBiomarkersResp::class.java)
         } catch (e: Exception) {
@@ -301,15 +347,11 @@ object NanoApi {
             Timber.w("NanoApi.postKinoResult: nanoBaseUrl not configured")
             return@withContext null
         }
-        val url = "$base/api/kino-result"
+        val url = NanoEndpoints.kinoResult(base)
         try {
             val jsonBody = App.gson.toJson(req)
-            val request = Request.Builder()
-                .url(url)
-                .withAuth(apiToken())
-                .post(jsonBody.toRequestBody(JSON))
-                .build()
-            val body = httpUtils.executeRequest(request)
+            val result = executeProtected("kino-result", NanoProtectedRequest.post(url, jsonBody), base)
+            val body = result.body ?: return@withContext null
             App.gson.fromJson(body, NanoKinoResultResp::class.java)
         } catch (e: IOException) {
             Timber.w(e, "NanoApi.postKinoResult failed")
@@ -321,7 +363,7 @@ object NanoApi {
     }
 
     /**
-     * Queries `${nanoBaseUrl}/api/kino-upgrade` for the latest APK version and OSS URL.
+     * Queries `${nanoBaseUrl}/kino/kino-upgrade` for the latest APK version and OSS URL.
      * Returns null if the request fails or is unauthorized.
      */
     suspend fun checkUpgrade(): poct.device.app.thirdparty.model.nano.NanoUpgradeResp? = withContext(Dispatchers.IO) {
@@ -330,10 +372,10 @@ object NanoApi {
             Timber.w("NanoApi.checkUpgrade: nanoBaseUrl not configured")
             return@withContext null
         }
-        val url = "$base/api/kino-upgrade"
+        val url = NanoEndpoints.kinoUpgrade(base)
         try {
-            val request = Request.Builder().url(url).withAuth(apiToken()).get().build()
-            val body = httpUtils.executeRequest(request)
+            val result = executeProtected("kino-upgrade", NanoProtectedRequest.get(url), base)
+            val body = result.body ?: return@withContext null
             App.gson.fromJson(body, poct.device.app.thirdparty.model.nano.NanoUpgradeResp::class.java)
         } catch (e: Exception) {
             Timber.w(e, "NanoApi.checkUpgrade failed")
