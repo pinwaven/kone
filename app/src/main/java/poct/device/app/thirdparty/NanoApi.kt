@@ -9,7 +9,10 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import poct.device.app.App
 import poct.device.app.AppParams
+import poct.device.app.BuildConfig
 import poct.device.app.R
+import poct.device.app.bean.ConfigInfoBean
+import poct.device.app.bean.ConfigInfoV2Bean
 import poct.device.app.bean.ConfigSysBean
 import poct.device.app.entity.service.SysConfigService
 import poct.device.app.thirdparty.model.nano.NanoActivateReq
@@ -22,6 +25,9 @@ import poct.device.app.thirdparty.model.nano.NanoChipResp
 import poct.device.app.thirdparty.model.nano.NanoEndpoints
 import poct.device.app.thirdparty.model.nano.NanoKinoResultReq
 import poct.device.app.thirdparty.model.nano.NanoKinoResultResp
+import poct.device.app.thirdparty.model.nano.NanoMachine
+import poct.device.app.thirdparty.model.nano.NanoMachineInfoResp
+import poct.device.app.thirdparty.model.nano.NanoMachineInfoSupport
 import poct.device.app.thirdparty.model.nano.NanoProtectedCallResult
 import poct.device.app.thirdparty.model.nano.NanoProtectedCallExecutor
 import poct.device.app.thirdparty.model.nano.NanoProtectedRequest
@@ -156,9 +162,19 @@ object NanoApi {
         val error: String? = null,
     )
 
+    data class MachineInfoResult(
+        val ok: Boolean,
+        val skipped: Boolean = false,
+        val message: String = "",
+        val status: Int? = null,
+        val error: String? = null,
+        val machine: NanoMachine? = null,
+    )
+
     suspend fun activateDevice(
         mainboardId: String,
         firmwareId: String,
+        firmwareVersion: String = "",
         model: String = "KNA1",
     ): ActivationResult = withContext(Dispatchers.IO) {
         val normalizedMainboardId = mainboardId.trim()
@@ -246,6 +262,7 @@ object NanoApi {
                     commTokenExpiresAt = expiresAt,
                     machine = machine!!,
                 )
+                uploadLocalMachineInfo(firmwareVersion = firmwareVersion)
                 ActivationResult(
                     ok = true,
                     status = response.code,
@@ -266,6 +283,100 @@ object NanoApi {
                 message = text(R.string.nano_auth_activate_failed, e.message ?: e.javaClass.simpleName)
             )
         }
+    }
+
+    suspend fun uploadLocalMachineInfo(
+        firmwareVersion: String = "",
+    ): MachineInfoResult {
+        val configBean = SysConfigService.findBean(ConfigInfoBean.PREFIX, ConfigInfoV2Bean::class)
+        return uploadMachineInfo(
+            softwareVersion = BuildConfig.VERSION_NAME,
+            firmwareVersion = firmwareVersion.ifBlank { configBean.hardware },
+        )
+    }
+
+    suspend fun uploadMachineInfo(
+        softwareVersion: String?,
+        firmwareVersion: String?,
+    ): MachineInfoResult = withContext(Dispatchers.IO) {
+        val base = baseUrl()
+        if (base.isEmpty()) {
+            return@withContext MachineInfoResult(ok = false, message = "nanoBaseUrl not configured")
+        }
+        val req = NanoMachineInfoSupport.buildRequest(softwareVersion, firmwareVersion)
+            ?: return@withContext MachineInfoResult(
+                ok = true,
+                skipped = true,
+                message = "machine info upload skipped: version values are blank or invalid",
+            )
+
+        val url = NanoEndpoints.machineInfo(base)
+        try {
+            val result = executeProtected(
+                endpointName = "kino-machines-info",
+                request = NanoProtectedRequest.post(url, App.gson.toJson(req)),
+                base = base,
+            )
+            if (!result.ok) {
+                return@withContext MachineInfoResult(
+                    ok = false,
+                    status = result.status,
+                    error = result.error,
+                    message = result.message.orEmpty(),
+                )
+            }
+            val parsed = App.gson.fromJson(result.body.orEmpty(), NanoMachineInfoResp::class.java)
+            if (!parsed.success) {
+                return@withContext MachineInfoResult(
+                    ok = false,
+                    status = result.status,
+                    error = parsed.error,
+                    message = "kino-machines-info failed: ${errorText(parsed.error)}",
+                )
+            }
+            val machine = parsed.machine
+            if (machine != null) {
+                updateCachedMachineInfo(machine, req.softwareVersion, req.firmwareVersion)
+            }
+            MachineInfoResult(
+                ok = true,
+                status = result.status,
+                message = "machine info uploaded",
+                machine = machine,
+            )
+        } catch (e: Exception) {
+            Timber.w(e, "NanoApi.uploadMachineInfo failed")
+            MachineInfoResult(
+                ok = false,
+                message = e.message ?: e.javaClass.simpleName,
+            )
+        }
+    }
+
+    private suspend fun updateCachedMachineInfo(
+        machine: NanoMachine,
+        requestedSoftwareVersion: String?,
+        requestedFirmwareVersion: String?,
+    ) {
+        val currentAuth = NanoAuthStore.load()
+        NanoAuthStore.save(
+            currentAuth.copy(
+                machineNo = machine.machineNo ?: currentAuth.machineNo,
+                machineName = machine.machineName ?: currentAuth.machineName,
+                model = machine.model ?: currentAuth.model,
+                status = machine.status ?: currentAuth.status,
+            )
+        )
+
+        val configBean = SysConfigService.findBean(ConfigInfoBean.PREFIX, ConfigInfoV2Bean::class)
+        val updated = configBean.copy(
+            name = machine.machineName ?: configBean.name,
+            code = machine.machineNo ?: configBean.code,
+            type = machine.model ?: configBean.type,
+            software = machine.softwareVersion ?: requestedSoftwareVersion ?: configBean.software,
+            hardware = machine.firmwareVersion ?: requestedFirmwareVersion ?: configBean.hardware,
+        )
+        SysConfigService.saveBean(ConfigInfoBean.PREFIX, updated)
     }
 
     /**

@@ -10,10 +10,13 @@ import poct.device.app.App
 import poct.device.app.R
 import poct.device.app.bean.ConfigInfoBean
 import poct.device.app.bean.ConfigInfoV2Bean
+import poct.device.app.bean.ConfigSysBean
 import poct.device.app.entity.service.SysConfigService
 import poct.device.app.serial.v2.ctl.CtlCommandsV2
 import poct.device.app.state.ActionState
 import poct.device.app.state.ViewState
+import poct.device.app.thirdparty.NanoApi
+import poct.device.app.thirdparty.model.nano.NanoAuthSupport
 import poct.device.app.thirdparty.SbEdgeFunc
 import poct.device.app.ui.sysconfig.SysConfigSysViewModel
 
@@ -66,10 +69,30 @@ class SysFunInfoViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             viewState.value = ViewState.LoadingOver()
 
+            val sysConfig = SysConfigService.findBean(ConfigSysBean.PREFIX, ConfigSysBean::class)
             val configBean =
                 SysConfigService.findBean(ConfigInfoBean.PREFIX, ConfigInfoV2Bean::class)
 
-            if (configBean.hasData()) {
+            if (sysConfig.flow == NanoApi.FLOW_NANO) {
+                val firmwareVersion = readFirmwareVersion()
+                val localConfig = if (firmwareVersion.isNotBlank()) {
+                    configBean.copy(hardware = firmwareVersion).also {
+                        SysConfigService.saveBean(ConfigInfoBean.PREFIX, it)
+                    }
+                } else {
+                    configBean
+                }
+                val upload = NanoApi.uploadLocalMachineInfo(firmwareVersion = firmwareVersion)
+                val latestConfig =
+                    SysConfigService.findBean(ConfigInfoBean.PREFIX, ConfigInfoV2Bean::class)
+                beanV2.value = if (latestConfig.hasData()) latestConfig else localConfig
+                if (!upload.ok && !upload.skipped) {
+                    actionState.value = ActionState(
+                        event = EVT_CONTACT_ADMIN,
+                        msg = upload.message,
+                    )
+                }
+            } else if (configBean.hasData()) {
                 beanV2.value = configBean
             } else {
                 // 获取设备ID
@@ -84,6 +107,11 @@ class SysFunInfoViewModel : ViewModel() {
 
             viewState.value = ViewState.LoadSuccess()
         }
+    }
+
+    private fun readFirmwareVersion(): String {
+        val hiResult = CtlCommandsV2.readAllData(CtlCommandsV2.hi())
+        return NanoAuthSupport.extractFirmwareVersion(hiResult)
     }
 
     fun onClearInteraction() {

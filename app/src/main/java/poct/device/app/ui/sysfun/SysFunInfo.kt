@@ -163,7 +163,8 @@ fun SysFunInfoInteraction(
     } else if (actionState.event == SysFunInfoViewModel.EVT_CONTACT_ADMIN) {
         AppAlert(
             visible = true,
-            content = stringResource(id = R.string.contact_admin),
+            content = actionState.msg?.ifBlank { stringResource(id = R.string.contact_admin) }
+                ?: stringResource(id = R.string.contact_admin),
             onOk = { onClearInteraction() }
         )
     }

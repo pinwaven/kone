@@ -45,6 +45,17 @@ data class NanoActivateResp(
     val error: String? = null,
 )
 
+data class NanoMachineInfoReq(
+    val softwareVersion: String? = null,
+    val firmwareVersion: String? = null,
+)
+
+data class NanoMachineInfoResp(
+    val success: Boolean = false,
+    val machine: NanoMachine? = null,
+    val error: String? = null,
+)
+
 data class NanoAuthState(
     val rootToken: String = "",
     val commToken: String = "",
@@ -87,6 +98,36 @@ object NanoAuthSupport {
         val value = if (raw.contains("ver:")) raw.substringAfter("ver:") else raw
         val firmware = value.trim().lineSequence().firstOrNull().orEmpty().trim()
         return firmware.substringAfter("~", firmware).trim()
+    }
+
+    fun extractFirmwareVersion(rawHandshake: String?): String {
+        val raw = rawHandshake.orEmpty().trim()
+        if (raw.isEmpty()) return ""
+        val value = if (raw.contains("ver:")) raw.substringAfter("ver:") else raw
+        val firmware = value.trim().lineSequence().firstOrNull().orEmpty().trim()
+        return firmware.substringBefore("~").trim()
+    }
+}
+
+object NanoMachineInfoSupport {
+    private const val MAX_VERSION_LENGTH = 128
+
+    fun buildRequest(
+        softwareVersion: String?,
+        firmwareVersion: String?,
+    ): NanoMachineInfoReq? {
+        val software = softwareVersion.normalizedVersion() ?: return null
+        val firmware = firmwareVersion.normalizedVersion() ?: return null
+        if (software.isEmpty() && firmware.isEmpty()) return null
+        return NanoMachineInfoReq(
+            softwareVersion = software.ifEmpty { null },
+            firmwareVersion = firmware.ifEmpty { null },
+        )
+    }
+
+    private fun String?.normalizedVersion(): String? {
+        val value = orEmpty().trim()
+        return if (value.length > MAX_VERSION_LENGTH) null else value
     }
 }
 
