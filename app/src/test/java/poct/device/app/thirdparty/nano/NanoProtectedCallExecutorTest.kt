@@ -60,7 +60,7 @@ class NanoProtectedCallExecutorTest {
     }
 
     @Test
-    fun refreshFailureIsReturnedWithoutSecondRetry() = runBlocking {
+    fun invalidRootTokenClearsLocalTokensWithoutSecondRetry() = runBlocking {
         val store = FakeAuthStore(authState(commToken = "expired", rootToken = "root-a"))
         val transport = FakeTransport(
             NanoRawResponse(401, """{"error":"comm_token_expired"}"""),
@@ -78,6 +78,30 @@ class NanoProtectedCallExecutorTest {
         assertEquals(401, result.status)
         assertEquals(listOf("expired"), transport.protectedTokens)
         assertEquals(listOf("root-a"), transport.exchangeTokens)
+        assertEquals("", store.state.rootToken)
+        assertEquals("", store.state.commToken)
+        assertEquals("", store.state.commTokenExpiresAt)
+        assertEquals("invalid_root_token", store.state.status)
+    }
+
+    @Test
+    fun refreshNetworkFailureKeepsExistingRootToken() = runBlocking {
+        val store = FakeAuthStore(authState(commToken = "expired", rootToken = "root-a"))
+        val transport = FakeTransport(
+            NanoRawResponse(401, """{"error":"comm_token_expired"}"""),
+            NanoRawResponse(500, """{"error":"backend_down"}""")
+        )
+        val executor = NanoProtectedCallExecutor(store, transport)
+
+        val result = executor.execute(
+            endpointName = "kino-chip",
+            request = NanoProtectedRequest.get("https://nano.test/kino/kino-chip?chip_id=abc")
+        )
+
+        assertFalse(result.ok)
+        assertEquals("backend_down", result.error)
+        assertEquals(500, result.status)
+        assertEquals("root-a", store.state.rootToken)
         assertEquals("expired", store.state.commToken)
     }
 
@@ -98,6 +122,10 @@ class NanoProtectedCallExecutorTest {
         assertEquals("machine_not_active", result.error)
         assertEquals(listOf("comm-a"), transport.protectedTokens)
         assertTrue(transport.exchangeTokens.isEmpty())
+        assertEquals("", store.state.rootToken)
+        assertEquals("", store.state.commToken)
+        assertEquals("", store.state.commTokenExpiresAt)
+        assertEquals("machine_not_active", store.state.status)
     }
 
     @Test

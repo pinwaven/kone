@@ -105,6 +105,7 @@ class NanoProtectedCallExecutor(
 
         val firstError = first.errorValue()
         if (firstError != "comm_token_expired") {
+            invalidateAuthIfNeeded(initialState, firstError)
             return first.toFailure(endpointName, firstError)
         }
 
@@ -120,7 +121,9 @@ class NanoProtectedCallExecutor(
 
         val exchange = transport.exchangeToken(rootToken)
         if (!exchange.isSuccessful()) {
-            return exchange.toFailure("token-exchange", exchange.errorValue())
+            val exchangeError = exchange.errorValue()
+            invalidateAuthIfNeeded(initialState, exchangeError)
+            return exchange.toFailure("token-exchange", exchangeError)
         }
 
         val exchanged = exchange.parseTokenExchange()
@@ -132,6 +135,7 @@ class NanoProtectedCallExecutor(
             )
 
         if (!exchanged.success) {
+            invalidateAuthIfNeeded(initialState, exchanged.error)
             return NanoProtectedCallResult(
                 ok = false,
                 status = exchange.status,
@@ -158,7 +162,15 @@ class NanoProtectedCallExecutor(
         return if (retry.isSuccessful()) {
             NanoProtectedCallResult(ok = true, status = retry.status, body = retry.body)
         } else {
-            retry.toFailure(endpointName, retry.errorValue())
+            val retryError = retry.errorValue()
+            invalidateAuthIfNeeded(refreshedState, retryError)
+            retry.toFailure(endpointName, retryError)
+        }
+    }
+
+    private suspend fun invalidateAuthIfNeeded(state: NanoAuthState, error: String?) {
+        if (error == "invalid_root_token" || error == "machine_not_active") {
+            authStore.save(state.invalidated(error))
         }
     }
 

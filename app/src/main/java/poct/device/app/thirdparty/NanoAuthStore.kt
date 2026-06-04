@@ -36,6 +36,16 @@ object NanoAuthStore {
         SysConfigService.saveBean(ConfigNanoAuthBean.PREFIX, state.toBean())
     }
 
+    suspend fun invalidate(reason: String): NanoAuthState {
+        val state = load().invalidated(reason)
+        save(state)
+        return state
+    }
+
+    suspend fun clear() {
+        SysConfigService.saveBean(ConfigNanoAuthBean.PREFIX, ConfigNanoAuthBean.Empty)
+    }
+
     private fun ConfigNanoAuthBean.toState(): NanoAuthState =
         NanoAuthState(
             rootToken = rootToken,

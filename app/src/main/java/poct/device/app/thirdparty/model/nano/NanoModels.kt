@@ -3,6 +3,7 @@ package poct.device.app.thirdparty.model.nano
 import com.google.gson.annotations.SerializedName
 import poct.device.app.R
 import poct.device.app.bean.ConfigInfoV2Bean
+import java.time.Instant
 
 // ── Requests ────────────────────────────────────────────────────────────────
 
@@ -76,6 +77,18 @@ data class NanoAuthState(
 ) {
     fun isActivated(): Boolean =
         rootToken.isNotBlank() && commToken.isNotBlank() && machineNo.isNotBlank()
+
+    fun invalidated(
+        reason: String,
+        timestamp: String = Instant.now().toString(),
+    ): NanoAuthState =
+        copy(
+            rootToken = "",
+            commToken = "",
+            commTokenExpiresAt = "",
+            status = reason,
+            refreshedAt = timestamp,
+        )
 }
 
 object NanoAuthSupport {
@@ -97,6 +110,17 @@ object NanoAuthSupport {
         if (value.isEmpty()) return "(empty)"
         if (value.length <= 8) return "***"
         return "${value.take(4)}...${value.takeLast(4)}"
+    }
+
+    fun redactSensitiveText(text: String?): String {
+        var value = text.orEmpty()
+        value = Regex(
+            pattern = "(\"(?:root_token|rootToken|comm_token|commToken)\"\\s*:\\s*\")([^\"]*)(\")",
+            option = RegexOption.IGNORE_CASE,
+        ).replace(value) { match ->
+            "${match.groupValues[1]}***${match.groupValues[3]}"
+        }
+        return Regex("Bearer\\s+\\S+", RegexOption.IGNORE_CASE).replace(value, "Bearer ***")
     }
 
     fun extractFirmwareId(rawHandshake: String?): String {

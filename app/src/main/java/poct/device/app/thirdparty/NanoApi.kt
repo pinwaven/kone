@@ -520,7 +520,7 @@ object NanoApi {
             Timber.w("NanoApi.postBiomarkers request prepared")
             val result = executeProtected("biomarkers", NanoProtectedRequest.post(url, jsonBody), base)
             val body = result.body ?: return@withContext null
-            Timber.w("NanoApi.postBiomarkers resp=$body")
+            Timber.w("NanoApi.postBiomarkers resp=%s", NanoAuthSupport.redactSensitiveText(body))
             App.gson.fromJson(body, NanoBiomarkersResp::class.java)
         } catch (e: Exception) {
             Timber.w(e, "NanoApi.postBiomarkers error: ${e::class.simpleName}")
