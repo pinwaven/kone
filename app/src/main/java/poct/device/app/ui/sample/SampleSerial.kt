@@ -1,8 +1,6 @@
 package poct.device.app.ui.sample
 
 import android.content.Intent
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,24 +11,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -49,10 +39,7 @@ import poct.device.app.component.AppPreviewWrapper
 import poct.device.app.component.AppScaffold
 import poct.device.app.serial.v2.ctl.CtlCommandsV2
 import poct.device.app.serial.v2.ctl.CtlConstantsV2
-import poct.device.app.state.RuntimeModeState
-import poct.device.app.theme.activeColor
 import poct.device.app.theme.filledFontColor
-import poct.device.app.theme.fontColor
 import poct.device.app.theme.inputFontColor
 import poct.device.app.thirdparty.NanoApi
 import poct.device.app.thirdparty.model.nano.NanoAuthSupport
@@ -72,8 +59,6 @@ fun SampleSerial(
     viewModel: SampleSerialViewModel = viewModel(),
 ) {
     val text by viewModel.text.collectAsState()
-    val nanoEnvironment by AppParams.runtimeModeState.nanoEnvironment.collectAsState()
-    var nanoEnvironmentDialogVisible by remember { mutableStateOf(false) }
     AppScaffold(
     ) {
         Column {
@@ -91,15 +76,6 @@ fun SampleSerial(
             }
             Row {
                 Column {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    AppFilledButton(
-                        modifier = Modifier
-                            .width(160.dp)
-                            .height(36.dp),
-                        fontSize = 14.sp,
-                        text = "环境：${nanoEnvironment.label}",
-                        onClick = { nanoEnvironmentDialogVisible = true }
-                    )
                     Spacer(modifier = Modifier.height(12.dp))
                     AppFilledButton(
                         modifier = Modifier
@@ -281,82 +257,6 @@ fun SampleSerial(
                 }
             }
         }
-        NanoEnvironmentDialog(
-            visible = nanoEnvironmentDialogVisible,
-            value = nanoEnvironment,
-            onCancel = { nanoEnvironmentDialogVisible = false },
-            onSelected = {
-                AppParams.runtimeModeState.setNanoEnvironment(it)
-                nanoEnvironmentDialogVisible = false
-            }
-        )
-    }
-}
-
-@Composable
-private fun NanoEnvironmentDialog(
-    visible: Boolean,
-    value: RuntimeModeState.NanoEnvironment,
-    onCancel: () -> Unit,
-    onSelected: (RuntimeModeState.NanoEnvironment) -> Unit,
-) {
-    if (!visible) {
-        return
-    }
-    Dialog(onDismissRequest = onCancel) {
-        Surface(
-            modifier = Modifier
-                .width(300.dp),
-            shape = RoundedCornerShape(8.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 18.dp)
-            ) {
-                Text(
-                    text = "选择环境",
-                    fontSize = 17.sp,
-                    color = fontColor
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                RuntimeModeState.NanoEnvironment.values().forEach { environment ->
-                    NanoEnvironmentDialogItem(
-                        environment = environment,
-                        selected = environment == value,
-                        onClick = { onSelected(environment) }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun NanoEnvironmentDialogItem(
-    environment: RuntimeModeState.NanoEnvironment,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(44.dp)
-            .clickable { onClick() },
-        horizontalArrangement = Arrangement.Start
-    ) {
-        RadioButton(
-            selected = selected,
-            colors = RadioButtonDefaults.colors(selectedColor = activeColor),
-            onClick = onClick
-        )
-        Text(
-            modifier = Modifier
-                .padding(top = 11.dp),
-            text = "${environment.label}环境",
-            fontSize = 15.sp,
-            color = inputFontColor
-        )
     }
 }
 

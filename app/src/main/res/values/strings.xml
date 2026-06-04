@@ -600,8 +600,8 @@
     <string name="nano_auth_activate_missing_token_or_machine">设备激活失败：后端响应缺少 token 或机器编号</string>
     <string name="nano_auth_activate_success">设备激活成功：%s</string>
     <string name="nano_auth_activate_network_failed">设备激活失败：网络错误 %s</string>
-    <string name="nano_auth_error_firmware_id_mismatch">硬件ID不匹配，请确认当前安卓板与分析仪是否为同一台已绑定设备</string>
-    <string name="nano_auth_error_mainboard_id_mismatch">安卓板ID不匹配，请确认当前安卓板与分析仪是否为同一台已绑定设备</string>
+    <string name="nano_auth_error_firmware_id_mismatch">硬件ID不匹配，请确认当前安卓板与PCB是否为同一台已绑定设备</string>
+    <string name="nano_auth_error_mainboard_id_mismatch">安卓板ID不匹配，请确认当前安卓板与PCB是否为同一台已绑定设备</string>
     <string name="nano_auth_error_no_available_machine_no">没有可用机器编号，请先在后台创建未激活机器编号</string>
     <string name="nano_auth_error_invalid_root_token">Root Token 无效，请重新激活设备</string>
     <string name="nano_auth_error_machine_not_active">设备未激活或已被禁用，请联系管理员</string>
