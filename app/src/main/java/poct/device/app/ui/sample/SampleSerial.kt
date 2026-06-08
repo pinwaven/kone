@@ -82,7 +82,7 @@ fun SampleSerial(
                             .width(120.dp)
                             .height(36.dp),
                         fontSize = 14.sp,
-                        text = "获取设备ID",
+                        text = "获取SN",
                         onClick = { viewModel.getDeviceId() }
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -264,8 +264,8 @@ class SampleSerialViewModel : ViewModel() {
     val text = MutableStateFlow("")
 
     fun getDeviceId() {
-        val deviceId: String = App.getDeviceId()
-        text.value = ("获取获取设备ID success: $deviceId")
+        val sn: String = App.getDeviceId()
+        text.value = ("获取SN success: $sn")
     }
 
     fun activateDevice() {

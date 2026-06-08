@@ -3,6 +3,7 @@ buildscript {
         KEY_ALIAS = "app"
         STORE_PASSWORD = "kone1688"
         KEY_PASSWORD = "kone1688"
+        PLATFORM_KEY_ALIAS = "platform"
         compile_sdk_version = 35
         target_sdk_version = 31
         min_version = 28

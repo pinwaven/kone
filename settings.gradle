@@ -26,3 +26,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "poct-device-app"
 include ':app'
+include ':fcreader'

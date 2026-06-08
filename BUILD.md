@@ -59,6 +59,7 @@ chmod +x gradlew
 > 如果构建提示 Gradle 文件权限不足，也可以直接使用 `bash` 解释器来运行：
 > ```bash
 > bash ./gradlew app:assembleRelease
+> GRADLE_USER_HOME=/mnt/project/project/kone/.gradle_user_home bash ./gradlew :fcreader:assembleRelease
 > ```
 
 ---

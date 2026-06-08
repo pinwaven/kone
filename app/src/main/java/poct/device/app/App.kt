@@ -1,10 +1,8 @@
 package poct.device.app
 
-import android.annotation.SuppressLint
 import android.app.Application
 import android.hardware.usb.UsbManager
 import android.net.wifi.WifiManager
-import android.provider.Settings
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
@@ -18,6 +16,7 @@ import poct.device.app.serial.v2.SerialHelperV2
 import poct.device.app.serial.v2.ctl.CtlCommandsV2
 import poct.device.app.utils.app.AppLangUtils
 import poct.device.app.utils.app.AppSystemUtils
+import poct.device.app.utils.app.DeviceIdUtils
 import timber.log.Timber
 
 /**
@@ -37,12 +36,8 @@ class App : Application() {
             .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
             .create()
 
-        @SuppressLint("HardwareIds")
         fun getDeviceId(): String {
-            return Settings.Secure.getString(
-                getContext().contentResolver,
-                Settings.Secure.ANDROID_ID
-            ) ?: ""
+            return DeviceIdUtils.getSn(getContext())
         }
 
         fun getSerialHelper(): SerialHelperV2 {
