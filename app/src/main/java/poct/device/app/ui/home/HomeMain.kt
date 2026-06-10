@@ -156,12 +156,13 @@ fun HomeMainBody(
             // 样本检测
             var workPreVisible by remember { mutableStateOf(false) }
             val venueModeEnabled by AppParams.runtimeModeState.venueModeEnabled.collectAsState()
+            val testModeEnabled by AppParams.runtimeModeState.testModeEnabled.collectAsState()
             HomeMainEntry(
                 painter = painterResource(
-                    id = if (venueModeEnabled) {
-                        R.mipmap.venue_btn
-                    } else {
-                        R.mipmap.home_btn
+                    id = when {
+                        testModeEnabled -> R.mipmap.test_mode_btn
+                        venueModeEnabled -> R.mipmap.venue_btn
+                        else -> R.mipmap.home_btn
                     }
                 ),
                 onClick = {

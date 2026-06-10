@@ -457,6 +457,13 @@
     <string name="factory_test">工厂测试</string>
     <string name="factory_test_password_content">请输入工厂测试密码</string>
     <string name="venue_mode">会场模式</string>
+    <string name="test_mode">测试模式</string>
+    <string name="test_mode_reaction_time">反应时间</string>
+    <string name="test_mode_reaction_time_unit">秒</string>
+    <string name="test_mode_absorb_time">吸水时间</string>
+    <string name="test_mode_scan_time">扫描时间</string>
+    <string name="test_mode_laser_power">激光强度</string>
+    <string name="test_mode_millisecond_unit">毫秒</string>
     <string name="after_sale_sun_upgrade">远程控制</string>
     <string name="after_sale_version_upgrade">版本更新</string>
     <string name="after_sale_version_history">历史记录</string>

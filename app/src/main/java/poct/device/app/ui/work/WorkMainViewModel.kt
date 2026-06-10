@@ -5,6 +5,12 @@ import android.graphics.BitmapFactory
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import info.szyh.common4.android.EventUtils
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.time.LocalDateTime
+import java.util.Base64
+import java.util.TreeSet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -22,10 +28,14 @@ import poct.device.app.R
 import poct.device.app.bean.CaseBean
 import poct.device.app.bean.ConfigReportBean
 import poct.device.app.bean.ConfigSysBean
+import poct.device.app.bean.ConfigTestModeBean
 import poct.device.app.bean.PdfBean
 import poct.device.app.bean.WorkFlowActionV2
 import poct.device.app.bean.WorkFlowV2
+import poct.device.app.bean.card.Card
+import poct.device.app.bean.card.CardBatch
 import poct.device.app.bean.card.CardConfig
+import poct.device.app.bean.card.CardInfoBean
 import poct.device.app.bean.card.CardStatus
 import poct.device.app.bean.converter.CaseConverter
 import poct.device.app.entity.Case
@@ -34,6 +44,7 @@ import poct.device.app.entity.CaseResult
 import poct.device.app.entity.User
 import poct.device.app.entity.service.CaseService
 import poct.device.app.entity.service.SysConfigService
+import poct.device.app.entity.service.TestModeConfigService
 import poct.device.app.event.AppPdfPrintEvent
 import poct.device.app.serial.v2.CtlSerialMessageV2
 import poct.device.app.serial.v2.ctl.CtlCommandsV2
@@ -53,9 +64,6 @@ import poct.device.app.thirdparty.model.nano.NanoKinoResultReq
 import poct.device.app.thirdparty.model.sbedge.resp.BaaResult
 import poct.device.app.thirdparty.model.sbedge.resp.BaaResultResp
 import poct.device.app.thirdparty.model.sbedge.resp.BioAgeProfile
-import poct.device.app.bean.card.Card
-import poct.device.app.bean.card.CardBatch
-import poct.device.app.bean.card.CardInfoBean
 import poct.device.app.utils.app.AppCardUtils
 import poct.device.app.utils.app.AppDictUtils
 import poct.device.app.utils.app.AppExperimentUtils
@@ -67,15 +75,11 @@ import poct.device.app.utils.app.AppToastUtil
 import poct.device.app.utils.app.AppTypeUtils
 import poct.device.app.utils.common.HttpUtils
 import timber.log.Timber
-import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.time.LocalDateTime
-import java.util.Base64
-import java.util.TreeSet
 
 class WorkMainViewModel : ViewModel() {
+    private val testModeCardCode = "KNC52286620-0100"
     val scanDuration = 16000
+    private var activeTestModeConfig = ConfigTestModeBean.Empty
 
     // 视图状态
     val viewState = MutableStateFlow<ViewState>(ViewState.Default)
@@ -83,12 +87,12 @@ class WorkMainViewModel : ViewModel() {
     val qrCodeContent = MutableStateFlow("")
 
     // 步骤条
-//    val step = MutableStateFlow(STEP_START)
+    //    val step = MutableStateFlow(STEP_START)
     // TODO 简化信息
     val step = MutableStateFlow(STEP_CASE)
 
     // 操作界面
-//    val action = MutableStateFlow(ACTION_START)
+    //    val action = MutableStateFlow(ACTION_START)
     // TODO 简化信息
     val action = MutableStateFlow(ACTION_CASE_SAMPLE)
 
@@ -149,6 +153,7 @@ class WorkMainViewModel : ViewModel() {
     // Nano flow: latest /api/biomarkers response — drives the simulator-style
     // result overlay (Bio Age / Sub-Ages / per-biomarker tabs).
     val nanoReport = MutableStateFlow<NanoBiomarkersResp?>(null)
+    val navigateReportDetail = MutableStateFlow(false)
     val nanoChipKeys = MutableStateFlow<List<String>?>(null)
 
     private var jobCmdSwitch: Job? = null
@@ -169,7 +174,7 @@ class WorkMainViewModel : ViewModel() {
 
             withContext(Dispatchers.IO) {
                 val moveDurationResult =
-                    CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, -88888, 900))
+                        CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, -88888, 900))
                 Timber.w("moveDurationResult: $moveDurationResult")
 
                 // 等待成功
@@ -179,34 +184,34 @@ class WorkMainViewModel : ViewModel() {
             viewState.value = ViewState.LoadSuccess()
         }
 
-//        // TODO 简化信息
-//        viewState.value = ViewState.LoadSuccess()
+        //        // TODO 简化信息
+        //        viewState.value = ViewState.LoadSuccess()
 
         // TODO 简化信息
         // 第一步将试剂卡吐出
-//        App.getCtlSerialService().send(
-//            CtlCommandsV2.homing(),
-//            object : SerialMessageCallbackAdapterV2<CtlSerialMessageV2>() {
-//                override suspend fun success(
-//                    feedback: CtlSerialMessageV2,
-//                    sender: SocketMessageSenderV2<CtlSerialMessageV2>?,
-//                    scope: CoroutineScope,
-//                ) {
-//                    onLoadHomingSuccess()
-//                }
-//
-//                override suspend fun error(
-//                    sender: SocketMessageSenderV2<CtlSerialMessageV2>?,
-//                    e: Exception?, scope: CoroutineScope,
-//                ) {
-//                    // TODO 硬件故障
-//                    actionState.value = ActionState(
-//                        event = EVT_DEV_ERROR,
-//                        msg = App.getContext().getString(R.string.work_ing_step6_error)
-//                    )
-//                    onClearInteraction()
-//                }
-//            })
+        //        App.getCtlSerialService().send(
+        //            CtlCommandsV2.homing(),
+        //            object : SerialMessageCallbackAdapterV2<CtlSerialMessageV2>() {
+        //                override suspend fun success(
+        //                    feedback: CtlSerialMessageV2,
+        //                    sender: SocketMessageSenderV2<CtlSerialMessageV2>?,
+        //                    scope: CoroutineScope,
+        //                ) {
+        //                    onLoadHomingSuccess()
+        //                }
+        //
+        //                override suspend fun error(
+        //                    sender: SocketMessageSenderV2<CtlSerialMessageV2>?,
+        //                    e: Exception?, scope: CoroutineScope,
+        //                ) {
+        //                    // TODO 硬件故障
+        //                    actionState.value = ActionState(
+        //                        event = EVT_DEV_ERROR,
+        //                        msg = App.getContext().getString(R.string.work_ing_step6_error)
+        //                    )
+        //                    onClearInteraction()
+        //                }
+        //            })
     }
 
     // 重置
@@ -236,6 +241,10 @@ class WorkMainViewModel : ViewModel() {
         bean.value = newBean
     }
 
+    fun consumeReportDetailNavigation() {
+        navigateReportDetail.value = false
+    }
+
     // 清除交互弹窗
     fun onClearInteraction() {
         CtlCommandsV2.isWaitScanStatusSuccessCancel = false
@@ -246,9 +255,7 @@ class WorkMainViewModel : ViewModel() {
             actionState.value = ActionState.Default
 
             withContext(Dispatchers.IO) {
-                val cancelResult = {
-                    CtlCommandsV2.readAllData(CtlCommandsV2.cancel())
-                }
+                val cancelResult = { CtlCommandsV2.readAllData(CtlCommandsV2.cancel()) }
                 Timber.w("cancelResult: $cancelResult")
             }
         }
@@ -259,12 +266,7 @@ class WorkMainViewModel : ViewModel() {
         actionState.value = ActionState(event = EVT_EXIT)
     }
 
-    /**
-     * 第一步：开始页(信息录入)
-     * 1、读取扫码配置、判断是否手动设置项目；
-     * 2、是，进入手动设置项目页
-     * 3、否，移出片仓
-     */
+    /** 第一步：开始页(信息录入) 1、读取扫码配置、判断是否手动设置项目； 2、是，进入手动设置项目页 3、否，移出片仓 */
     fun onActionStartNext() {
         viewState.value = ViewState.LoadingOver()
 
@@ -282,7 +284,7 @@ class WorkMainViewModel : ViewModel() {
 
             withContext(Dispatchers.IO) {
                 val moveToSsResult =
-                    CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
+                        CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
                 Timber.w("moveToSsResult: $moveToSsResult")
 
                 // 等待成功
@@ -293,32 +295,32 @@ class WorkMainViewModel : ViewModel() {
         }
     }
 
-    /**
-     * 第二步、手动配置项目下一步，移出片仓， 上一步开始页
-     * 回到上一步
-     */
+    /** 第二步、手动配置项目下一步，移出片仓， 上一步开始页 回到上一步 */
     fun onActionCaseInputPre() {
         if (step.value != STEP_START && step.value != STEP_CASE) {
             viewState.value = ViewState.LoadingOver()
             viewModelScope.launch {
-                val cancelResult = withContext(Dispatchers.IO) {
-                    CtlCommandsV2.readAllData(CtlCommandsV2.cancel())
-                }
+                val cancelResult =
+                        withContext(Dispatchers.IO) {
+                            CtlCommandsV2.readAllData(CtlCommandsV2.cancel())
+                        }
                 Timber.w("cancelResult: $cancelResult")
 
                 withContext(Dispatchers.IO) {
                     val moveToSsResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
+                            CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
                     Timber.w("moveToSsResult: $moveToSsResult")
 
                     // 等待成功
                     CtlCommandsV2.waitMoveToSsStatusSuccess()
 
                     if (cardConfig == null ||
-                        (cardConfig != null && cardConfig!!.ft0 >= 1 && action.value == ACTION_WORK)
+                                    (cardConfig != null &&
+                                            cardConfig!!.ft0 >= 1 &&
+                                            action.value == ACTION_WORK)
                     ) {
                         val moveDurationResult =
-                            CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, 88888, 900))
+                                CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, 88888, 900))
                         Timber.w("moveDurationResult: $moveDurationResult")
 
                         // 等待成功
@@ -338,14 +340,11 @@ class WorkMainViewModel : ViewModel() {
         onClearInteraction()
     }
 
-    /**
-     * 第二步、手动配置项目下一步，移出片仓， 上一步开始页
-     * 进入下一步：移出片仓
-     */
+    /** 第二步、手动配置项目下一步，移出片仓， 上一步开始页 进入下一步：移出片仓 */
     fun onActionCaseInputNext() {
         // 加载状态：正在移出片仓
         actionState.value =
-            ActionState(EVT_LOADING, App.getContext().getString(R.string.work_ing_step6))
+                ActionState(EVT_LOADING, App.getContext().getString(R.string.work_ing_step6))
         viewModelScope.launch {
             // 检查配置
             cardConfig = bean.value.cardInfo.cardConfig
@@ -360,18 +359,13 @@ class WorkMainViewModel : ViewModel() {
         }
     }
 
-    /**
-     * 第三步：放入芯片，
-     * 判断是否手动配置扫码
-     * 是，上一步：项目配置页
-     * 否，上一步：首页
-     */
+    /** 第三步：放入芯片， 判断是否手动配置扫码 是，上一步：项目配置页 否，上一步：首页 */
     fun onActionCaseChipPre() {
         // 判断是否手动
         if (sysConfig.value.scan.isEmpty() || sysConfig.value.scan == "y") {
             onReset()
             // TODO 简化信息
-//                updateAction(ACTION_START)
+            //                updateAction(ACTION_START)
         } else {
             // 更新新的操作状态
             updateAction(ACTION_CASE_INPUT)
@@ -379,17 +373,11 @@ class WorkMainViewModel : ViewModel() {
         onClearInteraction()
     }
 
-    /**
-     * TODO 简化信息 第一步：New
-     * 第三步：放入芯片，
-     * 判断是否手动配置扫码
-     * 是，扫码
-     * 否，直接读取配置
-     */
+    /** TODO 简化信息 第一步：New 第三步：放入芯片， 判断是否手动配置扫码 是，扫码 否，直接读取配置 */
     fun onActionCaseChipNext() {
         Timber.d("onActionCaseChipNext")
         actionState.value =
-            ActionState(EVT_LOADING, App.getContext().getString(R.string.work_read_chip))
+                ActionState(EVT_LOADING, App.getContext().getString(R.string.work_read_chip))
 
         loadCard()
     }
@@ -415,12 +403,13 @@ class WorkMainViewModel : ViewModel() {
             // UI界面操作
             if (it.type == WorkFlowActionV2.TYPE_UI) {
                 if (it.time >= 0 && it.step == STEP_CASE) {
-                    jobFy0 = viewModelScope.launch {
-                        if (it.action == ACTION_CASE_WAIT) {
-                            checkStep.value = 5
-                            progress.value = 5F
-                        }
-                    }
+                    jobFy0 =
+                            viewModelScope.launch {
+                                if (it.action == ACTION_CASE_WAIT) {
+                                    checkStep.value = 5
+                                    progress.value = 5F
+                                }
+                            }
                 }
                 if (it.time >= 0 && it.step == STEP_WORK) {
                     showTime.value = true
@@ -428,14 +417,9 @@ class WorkMainViewModel : ViewModel() {
                         if (it.action == ACTION_WORK_WAIT) {
                             withContext(Dispatchers.IO) {
                                 val moveToSsResult =
-                                    CtlCommandsV2.readAllData(
-                                        CtlCommandsV2.moveToSs(
-                                            0,
-                                            88888,
-                                            10000,
-                                            0
+                                        CtlCommandsV2.readAllData(
+                                                CtlCommandsV2.moveToSs(0, 88888, 10000, 0)
                                         )
-                                    )
                                 Timber.d("moveToSsResult: $moveToSsResult")
 
                                 // 等待成功
@@ -481,14 +465,9 @@ class WorkMainViewModel : ViewModel() {
 
                             withContext(Dispatchers.IO) {
                                 val moveToSsResult =
-                                    CtlCommandsV2.readAllData(
-                                        CtlCommandsV2.moveToSs(
-                                            0,
-                                            88888,
-                                            10000,
-                                            0
+                                        CtlCommandsV2.readAllData(
+                                                CtlCommandsV2.moveToSs(0, 88888, 10000, 0)
                                         )
-                                    )
                                 Timber.d("moveToSsResult: $moveToSsResult")
 
                                 // 等待成功
@@ -503,258 +482,292 @@ class WorkMainViewModel : ViewModel() {
             }
 
             // 对应指令操作
-            jobCmdSwitch = viewModelScope.launch(Dispatchers.IO) {
-                when (it.cmd.cmd) {
-//                    CtlConstantsV2.CMD_ACTION_MOVE_TO_SS -> {
-//                        doMoveIn(it)
-//                    }
-//
-                    CtlConstantsV2.CMD_ACTION_HOMING -> {
-                        doMoveOut(it)
+            jobCmdSwitch =
+                    viewModelScope.launch(Dispatchers.IO) {
+                        when (it.cmd.cmd) {
+                            //                    CtlConstantsV2.CMD_ACTION_MOVE_TO_SS -> {
+                            //                        doMoveIn(it)
+                            //                    }
+                            //
+                            CtlConstantsV2.CMD_ACTION_HOMING -> {
+                                doMoveOut(it)
+                            }
+                            CtlConstantsV2.CMD_ACTION_ABSORB -> {
+                                doOpenXs(it)
+                            }
+                            CtlConstantsV2.CMD_ACTION_SCAN -> {
+                                //                        Thread {
+                                //                            CoroutineScope(Dispatchers.IO).launch
+                                // {
+                                //                                for (i in 0..0) {
+                                //                                    delay(1 * 1000L)
+                                //                                    newProgressTime()
+                                //                                }
+                                //                            }
+                                //                        }.start()
+                                //                        if (cardConfig!!.xt1 > 0) {
+                                //                            doOpenXs(it)
+                                //                        } else {
+                                //                            newProgress(it)
+                                //                            doNext()
+                                //                        }
+                                doScanTest(it)
+                            }
+                            CtlConstantsV2.CMD_ACTION_QUERY_DATA -> {
+                                doReadData(it)
+                            }
+                        }
                     }
-
-                    CtlConstantsV2.CMD_ACTION_ABSORB -> {
-                        doOpenXs(it)
-                    }
-
-                    CtlConstantsV2.CMD_ACTION_SCAN -> {
-//                        Thread {
-//                            CoroutineScope(Dispatchers.IO).launch {
-//                                for (i in 0..0) {
-//                                    delay(1 * 1000L)
-//                                    newProgressTime()
-//                                }
-//                            }
-//                        }.start()
-//                        if (cardConfig!!.xt1 > 0) {
-//                            doOpenXs(it)
-//                        } else {
-//                            newProgress(it)
-//                            doNext()
-//                        }
-                        doScanTest(it)
-                    }
-
-                    CtlConstantsV2.CMD_ACTION_QUERY_DATA -> {
-                        doReadData(it)
-                    }
-                }
-            }
         }
     }
 
     private fun doReadData(workFlowAction: WorkFlowActionV2) {
-        jobQuery = viewModelScope.launch {
-            Timber.d("doReadData")
+        jobQuery =
+                viewModelScope.launch {
+                    Timber.d("doReadData")
 
-//        checkStep.value = 70
+                    //        checkStep.value = 70
 
-            var queryResult: ByteArray?
-            var retryTotal = 0
-            while (true) {
-                queryResult = withContext(Dispatchers.IO) {
-                    CtlCommandsV2.readAllDataByteArray(workFlowAction.cmd)
-                }
-                if (queryResult != null) {
-                    Timber.w("queryResult: ${queryResult.toString(Charsets.UTF_8)}")
-                    break
-                } else {
-                    if (retryTotal >= 3) {
-                        actionState.value = ActionState(
-                            EVT_DEV_ERROR,
-                            App.getContext().getString(R.string.work_read_chip_error2)
-                        )
+                    var queryResult: ByteArray?
+                    var retryTotal = 0
+                    while (true) {
+                        queryResult =
+                                withContext(Dispatchers.IO) {
+                                    CtlCommandsV2.readAllDataByteArray(workFlowAction.cmd)
+                                }
+                        if (queryResult != null) {
+                            Timber.w("queryResult: ${queryResult.toString(Charsets.UTF_8)}")
+                            break
+                        } else {
+                            if (retryTotal >= 3) {
+                                actionState.value =
+                                        ActionState(
+                                                EVT_DEV_ERROR,
+                                                App.getContext()
+                                                        .getString(R.string.work_read_chip_error2)
+                                        )
+                                onClearInteraction()
+                                return@launch
+                            }
+
+                            delay(500)
+                            retryTotal++
+                            continue
+                        }
+                    }
+
+                    // 写入数据文件，作为检测参考
+                    val file = File(App.getContext().externalCacheDir, "data.bin")
+                    if (!file.parentFile?.exists()!!) {
+                        file.parentFile?.mkdirs()
+                    }
+                    if (file.exists()) {
+                        file.delete()
+                    }
+                    FileOutputStream(file).use { outputStream -> outputStream.write(queryResult!!) }
+
+                    checkStep.value = 85
+                    progress.value = 85F
+
+                    val scanData = AppCardUtils.parseData(queryResult!!)
+                    if (scanData == null) {
+                        actionState.value =
+                                ActionState(
+                                        EVT_DEV_ERROR,
+                                        App.getContext().getString(R.string.work_read_chip_error2)
+                                )
                         onClearInteraction()
                         return@launch
                     }
 
-                    delay(500)
-                    retryTotal++
-                    continue
-                }
-            }
+                    checkStep.value = 90
+                    progress.value = 90F
 
-            // 写入数据文件，作为检测参考
-            val file = File(App.getContext().externalCacheDir, "data.bin")
-            if (!file.parentFile?.exists()!!) {
-                file.parentFile?.mkdirs()
-            }
-            if (file.exists()) {
-                file.delete()
-            }
-            FileOutputStream(file).use { outputStream ->
-                outputStream.write(queryResult!!)
-            }
+                    // TODO 打印解析信息
+                    //        try {
+                    //            // 访问解析后的 ScanData
+                    //            Timber.w("解析后的 ScanData:")
+                    //            Timber.w("Data Length: ${scanData.dataLen}")
+                    //            Timber.w("Laser Current: ${scanData.laserCurr}")
+                    //            Timber.w("Fixed 5A: 0x${scanData.fixed5a?.toString(16)}")
+                    //            Timber.w("Data Bias: ${scanData.dataBias}")
+                    //            Timber.w("Laser Current Bias: ${scanData.laserCurrBias}")
+                    //            Timber.w("Fixed A5: 0x${scanData.fixedA5?.toString(16)}")
+                    //            Timber.w("Raw Data Points: ${scanData.rawData}")
+                    //            Timber.w("Raw Data Points Size: ${scanData.rawData?.size}")
+                    //            Timber.w("Data Biased: ${scanData.dataBiased}")
+                    //            Timber.w("Data Biased Size: ${scanData.dataBiased?.size}")
+                    //            Timber.w("Laser Current Biased: ${scanData.laserCurrBiased}")
+                    //
+                    //            val stats = scanData.getStatistics()
+                    //            Timber.w("数据统计信息:")
+                    //            stats.forEach { (key, value) ->
+                    //                Timber.w("  $key: $value")
+                    //            }
+                    //        } catch (e: IllegalArgumentException) {
+                    //            Timber.w("数据处理错误: ${e.message}")
+                    //        } catch (e: Exception) {
+                    //            Timber.w("初始化分析器时发生错误: ${e.message}")
+                    //        }
 
-            checkStep.value = 85
-            progress.value = 85F
-
-            val scanData = AppCardUtils.parseData(queryResult!!)
-            if (scanData == null) {
-                actionState.value = ActionState(
-                    EVT_DEV_ERROR,
-                    App.getContext().getString(R.string.work_read_chip_error2)
-                )
-                onClearInteraction()
-                return@launch
-            }
-
-            checkStep.value = 90
-            progress.value = 90F
-
-            // TODO 打印解析信息
-//        try {
-//            // 访问解析后的 ScanData
-//            Timber.w("解析后的 ScanData:")
-//            Timber.w("Data Length: ${scanData.dataLen}")
-//            Timber.w("Laser Current: ${scanData.laserCurr}")
-//            Timber.w("Fixed 5A: 0x${scanData.fixed5a?.toString(16)}")
-//            Timber.w("Data Bias: ${scanData.dataBias}")
-//            Timber.w("Laser Current Bias: ${scanData.laserCurrBias}")
-//            Timber.w("Fixed A5: 0x${scanData.fixedA5?.toString(16)}")
-//            Timber.w("Raw Data Points: ${scanData.rawData}")
-//            Timber.w("Raw Data Points Size: ${scanData.rawData?.size}")
-//            Timber.w("Data Biased: ${scanData.dataBiased}")
-//            Timber.w("Data Biased Size: ${scanData.dataBiased?.size}")
-//            Timber.w("Laser Current Biased: ${scanData.laserCurrBiased}")
-//
-//            val stats = scanData.getStatistics()
-//            Timber.w("数据统计信息:")
-//            stats.forEach { (key, value) ->
-//                Timber.w("  $key: $value")
-//            }
-//        } catch (e: IllegalArgumentException) {
-//            Timber.w("数据处理错误: ${e.message}")
-//        } catch (e: Exception) {
-//            Timber.w("初始化分析器时发生错误: ${e.message}")
-//        }
-
-            val pointList = convertToPointListV2(scanData.rawData)
-            onBeanUpdate(
-                bean.value.copy(
-                    workResult = genResult(pointList),
-                    workPoints = Json.encodeToString(pointList),
-                    workTime = AppLocalDateUtils.formatDateTime(LocalDateTime.now())
-                )
-            )
-            Timber.w("doReadData actionState.value.event ${actionState.value.event}")
-
-            if (actionState.value.event == EVT_DEV_ERROR) {
-                return@launch
-            }
-
-            withContext(Dispatchers.IO) {
-                if (isNanoFlow()) {
-                    // Nano flow: POST measured biomarkers to nano /api/biomarkers
-                    // which returns bioage_profile inline (no polling needed),
-                    // then POST /api/kino-result to mark the chip used.
-                    val testData = extractTestData(nanoBiomarkerKeys, bean.value.resultList)
-                    Timber.w("[nano] patientId=${bean.value.patientId} keys=$nanoBiomarkerKeys testData=$testData")
-                    val biomarkersResp = NanoApi.postBiomarkers(
-                        NanoBiomarkersReq(
-                            openid = bean.value.patientId,
-                            testType = "kino_chip",
-                            testData = testData,
-                            kinoDeviceId = NanoApi.deviceSerial().ifEmpty { null },
-                        )
-                    )
-                    Timber.w("[nano] biomarkersResp=${biomarkersResp} profile=${biomarkersResp?.bioageProfile}")
-                    nanoReport.value = biomarkersResp
-                    val nanoProfile = biomarkersResp?.bioageProfile
-                    if (nanoProfile != null) {
-                        val resultList = bean.value.resultList
-                        if (resultList.isNotEmpty()) {
-                            resultList[0].result = nanoProfile.bioAge.toString()
-                            resultList[0].refer = nanoProfile.chronoAge.toString()
-                            resultList[0].radioValue = when {
-                                nanoProfile.ageDifference > 1  -> "red|衰老加速"
-                                nanoProfile.ageDifference < -1 -> "green|衰老减速"
-                                else                           -> "green|正常"
-                            }
-                        }
-                        onBeanUpdate(
+                    val pointList = convertToPointListV2(scanData.rawData)
+                    val testModeEnabled = isTestModeEnabled()
+                    if (testModeEnabled) {
+                        onBeanUpdate(buildTestModeReportBean(pointList, ""))
+                        actionState.value = ActionState.Default
+                        checkStep.value = 100
+                        progress.value = 100F
+                        AppParams.varReport = bean.value
+                        navigateReportDetail.value = true
+                        Timber.d("test mode doReadData done")
+                        return@launch
+                    }
+                    onBeanUpdate(
                             bean.value.copy(
-                                workResult = Json.encodeToString(resultList),
-                                baaResult = nanoProfile.toBaaResult(),
+                                    workResult = genResult(pointList),
+                                    workPoints = Json.encodeToString(pointList),
+                                    workTime = AppLocalDateUtils.formatDateTime(LocalDateTime.now())
                             )
-                        )
-                    }
-                    checkStep.value = 95
-                    progress.value = 95F
-                    saveCase(bean.value)
-                    NanoApi.postKinoResult(
-                        NanoKinoResultReq(
-                            chipId = bean.value.qrCode,
-                            data = mapOf(
-                                "biomarkers"     to (biomarkersResp?.biomarkers ?: testData),
-                                "bioage_profile" to nanoProfile,
-                            ),
-                            bioAge = nanoProfile?.bioAge,
-                            kinoDeviceId = NanoApi.deviceSerial().ifEmpty { null },
-                        )
                     )
-                } else {
-                    // 自动上传数据到服务器
-                    FrosApi.uploadPatientReportDataToServer(bean.value)
+                    Timber.w("doReadData actionState.value.event ${actionState.value.event}")
 
-                    if (bean.value.type == CaseBean.TYPE_3LJ_BIOAGE_L1 || bean.value.type == CaseBean.TYPE_BIOAGE_CRP) {
-                        while (true) {
-                            val baaResultResp: BaaResultResp? =
-                                SbEdgeFunc.baaResult(bean.value.qrCode, bean.value.patientId)
-                            if (baaResultResp == null) {
-                                delay(500)
-                                continue
-                            } else {
-                                val resultList = bean.value.resultList
-                                val baaResult = baaResultResp.detail!!
+                    if (!testModeEnabled && actionState.value.event == EVT_DEV_ERROR) {
+                        return@launch
+                    }
 
-                                resultList[0].result = baaResult.bioAgeProfile.bioAge.toString()
-                                resultList[0].refer = baaResult.bioAgeProfile.chronoAge.toString()
-
-                                var assessResultStr = "green|正常"
-                                if (baaResult.bioAgeProfile.ageDifference > 1) {
-                                    assessResultStr = "red|衰老加速"
-                                } else if (baaResult.bioAgeProfile.ageDifference < -1) {
-                                    assessResultStr = "green|衰老减速"
-                                }
-                                resultList[0].radioValue = assessResultStr
-
-                                onBeanUpdate(
-                                    bean.value.copy(
-                                        workResult = Json.encodeToString(resultList),
-                                        baaResult = baaResult,
-                                        baaAssets = baaResultResp.assets!!
+                    withContext(Dispatchers.IO) {
+                        if (isNanoFlow()) {
+                            // Nano flow: POST measured biomarkers to nano /api/biomarkers
+                            // which returns bioage_profile inline (no polling needed),
+                            // then POST /api/kino-result to mark the chip used.
+                            val testData = extractTestData(nanoBiomarkerKeys, bean.value.resultList)
+                            Timber.w(
+                                    "[nano] patientId=${bean.value.patientId} keys=$nanoBiomarkerKeys testData=$testData"
+                            )
+                            val biomarkersResp =
+                                    NanoApi.postBiomarkers(
+                                            NanoBiomarkersReq(
+                                                    openid = bean.value.patientId,
+                                                    testType = "kino_chip",
+                                                    testData = testData,
+                                                    kinoDeviceId =
+                                                            NanoApi.deviceSerial().ifEmpty { null },
+                                            )
                                     )
+                            Timber.w(
+                                    "[nano] biomarkersResp=${biomarkersResp} profile=${biomarkersResp?.bioageProfile}"
+                            )
+                            nanoReport.value = biomarkersResp
+                            val nanoProfile = biomarkersResp?.bioageProfile
+                            if (nanoProfile != null) {
+                                val resultList = bean.value.resultList
+                                if (resultList.isNotEmpty()) {
+                                    resultList[0].result = nanoProfile.bioAge.toString()
+                                    resultList[0].refer = nanoProfile.chronoAge.toString()
+                                    resultList[0].radioValue =
+                                            when {
+                                                nanoProfile.ageDifference > 1 -> "red|衰老加速"
+                                                nanoProfile.ageDifference < -1 -> "green|衰老减速"
+                                                else -> "green|正常"
+                                            }
+                                }
+                                onBeanUpdate(
+                                        bean.value.copy(
+                                                workResult = Json.encodeToString(resultList),
+                                                baaResult = nanoProfile.toBaaResult(),
+                                        )
                                 )
-                                break
                             }
+                            checkStep.value = 95
+                            progress.value = 95F
+                            saveCase(bean.value)
+                            NanoApi.postKinoResult(
+                                    NanoKinoResultReq(
+                                            chipId = bean.value.qrCode,
+                                            data =
+                                                    mapOf(
+                                                            "biomarkers" to
+                                                                    (biomarkersResp?.biomarkers
+                                                                            ?: testData),
+                                                            "bioage_profile" to nanoProfile,
+                                                    ),
+                                            bioAge = nanoProfile?.bioAge,
+                                            kinoDeviceId = NanoApi.deviceSerial().ifEmpty { null },
+                                    )
+                            )
+                        } else {
+                            // 自动上传数据到服务器
+                            FrosApi.uploadPatientReportDataToServer(bean.value)
+
+                            if (bean.value.type == CaseBean.TYPE_3LJ_BIOAGE_L1 ||
+                                            bean.value.type == CaseBean.TYPE_BIOAGE_CRP
+                            ) {
+                                while (true) {
+                                    val baaResultResp: BaaResultResp? =
+                                            SbEdgeFunc.baaResult(
+                                                    bean.value.qrCode,
+                                                    bean.value.patientId
+                                            )
+                                    if (baaResultResp == null) {
+                                        delay(500)
+                                        continue
+                                    } else {
+                                        val resultList = bean.value.resultList
+                                        val baaResult = baaResultResp.detail!!
+
+                                        resultList[0].result =
+                                                baaResult.bioAgeProfile.bioAge.toString()
+                                        resultList[0].refer =
+                                                baaResult.bioAgeProfile.chronoAge.toString()
+
+                                        var assessResultStr = "green|正常"
+                                        if (baaResult.bioAgeProfile.ageDifference > 1) {
+                                            assessResultStr = "red|衰老加速"
+                                        } else if (baaResult.bioAgeProfile.ageDifference < -1) {
+                                            assessResultStr = "green|衰老减速"
+                                        }
+                                        resultList[0].radioValue = assessResultStr
+
+                                        onBeanUpdate(
+                                                bean.value.copy(
+                                                        workResult =
+                                                                Json.encodeToString(resultList),
+                                                        baaResult = baaResult,
+                                                        baaAssets = baaResultResp.assets!!
+                                                )
+                                        )
+                                        break
+                                    }
+                                }
+                            }
+
+                            checkStep.value = 95
+                            progress.value = 95F
+
+                            saveCase(bean.value)
+
+                            // 更新试剂卡状态
+                            SbEdgeFunc.updateCardStatus(
+                                    bean.value.qrCode,
+                                    CardStatus.SUCCESS.statusVal
+                            )
                         }
                     }
 
-                    checkStep.value = 95
-                    progress.value = 95F
+                    checkStep.value = 100
+                    progress.value = 100F
 
-                    saveCase(bean.value)
+                    if (bean.value.state == 0) {
+                        onWorkDone()
+                    }
 
-                    // 更新试剂卡状态
-                    SbEdgeFunc.updateCardStatus(bean.value.qrCode, CardStatus.SUCCESS.statusVal)
+                    delay(CtlCommandsV2.delayMs)
+
+                    // 移除仓门
+                    doMoveOut()
+
+                    Timber.d("doReadData done")
                 }
-            }
-
-            checkStep.value = 100
-            progress.value = 100F
-
-            if (bean.value.state == 0) {
-                onWorkDone()
-            }
-
-            delay(CtlCommandsV2.delayMs)
-
-            // 移除仓门
-            doMoveOut()
-
-            Timber.d("doReadData done")
-        }
     }
 
     fun uploadReport(data: CaseBean) {
@@ -763,247 +776,257 @@ class WorkMainViewModel : ViewModel() {
             FrosApi.uploadPatientReportDataToServer(data)
 
             withContext(Dispatchers.Main) {
-                AppToastUtil.shortShow(
-                    App.getContext()
-                        .getString(R.string.report_upload_success)
-                )
+                AppToastUtil.shortShow(App.getContext().getString(R.string.report_upload_success))
             }
         }
     }
 
     private fun appendData(
-        feedback: CtlSerialMessageV2?,
-        dataMap: LinkedHashMap<String, String>,
+            feedback: CtlSerialMessageV2?,
+            dataMap: LinkedHashMap<String, String>,
     ) {
         // TODO 串口失联时，补救逻辑
-//        if (AppParams.devMock) {
-//            AppSampleUtils.fillDataMap(dataMap)
-//            return
-//        }
+        //        if (AppParams.devMock) {
+        //            AppSampleUtils.fillDataMap(dataMap)
+        //            return
+        //        }
 
-//        val paramData = feedback!!.paramData
-//        val amount = paramData.getParameter(CtlConstantsV2.PARAM_AMOUNT) ?: "1"
-//        val end = paramData.getParameter(CtlConstantsV2.PARAM_TAIL_INDEX) ?: "1"
-//        val data = paramData.getParameter(CtlConstantsV2.PARAM_DATA)
-//        if (!data.isNullOrBlank()) {
-//            dataMap.putIfAbsent(end, data)
-//        }
+        //        val paramData = feedback!!.paramData
+        //        val amount = paramData.getParameter(CtlConstantsV2.PARAM_AMOUNT) ?: "1"
+        //        val end = paramData.getParameter(CtlConstantsV2.PARAM_TAIL_INDEX) ?: "1"
+        //        val data = paramData.getParameter(CtlConstantsV2.PARAM_DATA)
+        //        if (!data.isNullOrBlank()) {
+        //            dataMap.putIfAbsent(end, data)
+        //        }
     }
 
     private fun doScanTest(workFlowAction: WorkFlowActionV2) {
-        jobScan = viewModelScope.launch {
-            Timber.d("doScanTest")
+        jobScan =
+                viewModelScope.launch {
+                    Timber.d("doScanTest")
 
-            // 激光功率
-            withContext(Dispatchers.IO) {
-                val getLDPwr =
-                    CtlCommandsV2.readAllData(CtlCommandsV2.getLDPwr())
-                Timber.w("getLDPwr: $getLDPwr")
+                    // 激光功率
+                    withContext(Dispatchers.IO) {
+                        val getLDPwr = CtlCommandsV2.readAllData(CtlCommandsV2.getLDPwr())
+                        Timber.w("getLDPwr: $getLDPwr")
 
-                val setLDPwr =
-                    CtlCommandsV2.readAllData(CtlCommandsV2.setLDPwr(cardConfig!!.cutOff1.toInt()))
-                Timber.w("setLDPwr: $setLDPwr")
-            }
-
-            checkStep.value = 50
-            progress.value = 50F
-
-            val scanOk = withContext(Dispatchers.IO) {
-                // 并发执行进度更新和扫描任务
-                val progressJob = async {
-                    // 进度从50到64的累计逻辑
-                    val startProgress = 50F
-                    val endProgress = 64F
-                    val progressRange = endProgress - startProgress
-
-                    val updateInterval = 100L // 每100ms更新一次
-                    val steps = scanDuration / updateInterval
-
-                    if (steps > 0) {
-                        val increment = progressRange / steps
-                        for (i in 1..steps) {
-                            delay(updateInterval)
-                            val currentProgress = startProgress + (increment * i)
-                            progress.value = currentProgress.coerceAtMost(endProgress)
-                        }
+                        val setLDPwr =
+                                CtlCommandsV2.readAllData(
+                                        CtlCommandsV2.setLDPwr(cardConfig!!.cutOff1.toInt())
+                                )
+                        Timber.w("setLDPwr: $setLDPwr")
                     }
 
-                    // 确保最终进度精确到64
-                    progress.value = endProgress
+                    checkStep.value = 50
+                    progress.value = 50F
+
+                    val scanOk =
+                            withContext(Dispatchers.IO) {
+                                // 并发执行进度更新和扫描任务
+                                val progressJob = async {
+                                    // 进度从50到64的累计逻辑
+                                    val startProgress = 50F
+                                    val endProgress = 64F
+                                    val progressRange = endProgress - startProgress
+
+                                    val updateInterval = 100L // 每100ms更新一次
+                                    val steps = scanDurationMillis() / updateInterval
+
+                                    if (steps > 0) {
+                                        val increment = progressRange / steps
+                                        for (i in 1..steps) {
+                                            delay(updateInterval)
+                                            val currentProgress = startProgress + (increment * i)
+                                            progress.value =
+                                                    currentProgress.coerceAtMost(endProgress)
+                                        }
+                                    }
+
+                                    // 确保最终进度精确到64
+                                    progress.value = endProgress
+                                }
+
+                                // 整片检测
+                                val scanResult = CtlCommandsV2.readAllData(workFlowAction.cmd)
+                                Timber.w("scanResult: $scanResult")
+
+                                val scanSuccess = CtlCommandsV2.waitScanStatusSuccess()
+
+                                // 等待进度更新完成（如果扫描先完成）
+                                progressJob.await()
+
+                                scanSuccess
+                            }
+
+                    if (!scanOk) {
+                        return@launch
+                    }
+
+                    checkStep.value = 65
+                    progress.value = 65F
+
+                    doNext()
+
+                    // TODO: 当前不使用检测的配置
+                    // 查询是否扫码的配置
+                    //        sysConfig = SysConfigService.findBean(ConfigSysBean.PREFIX,
+                    // ConfigSysBean::class)
+                    //        if(sysConfig!!.checkMethod == "whole") {
+                    //
+                    //        }else{
+                    //            // 切片检测
+                    //            val configBean = CardConfigConverter.fromEntity(cardConfig!!)
+                    //            val topList = configBean.topList;
+                    //            var flag = true
+                    //            var count = 0;
+                    //            while (count < topList.size) {
+                    //                if(flag) {
+                    //                    App.getCtlSerialService().send(
+                    //                        CtlCommandsV2.scanTest(
+                    //                            start = topList[count].start.toDouble().toInt(),
+                    //                            end = topList[count].end.toDouble().toInt(),
+                    //                            ppmm = cardConfig!!.scanPPMM,
+                    //                        ),
+                    //                        object :
+                    // SerialMessageCallbackAdapterV2<CtlSerialMessageV2>() {
+                    //                            override suspend fun delay(
+                    //                                feedback: CtlSerialMessageV2,
+                    //                                sender:
+                    // SocketMessageSenderV2<CtlSerialMessageV2>?,
+                    //                                scope: CoroutineScope,
+                    //                            ) {
+                    //
+                    //                            }
+                    //
+                    //                            override suspend fun error(
+                    //                                sender:
+                    // SocketMessageSenderV2<CtlSerialMessageV2>?,
+                    //                                e: Exception?,
+                    //                                scope: CoroutineScope,
+                    //                            ) {
+                    //                                // TODO 硬件故障
+                    //                                actionState.value = ActionState(event =
+                    // EVT_DEV_ERROR, msg =
+                    // App.getContext().getString(R.string.work_ing_step5_error))
+                    //                                onClearInteraction()
+                    //                            }
+                    //
+                    //                            override suspend fun success(
+                    //                                feedback: CtlSerialMessageV2,
+                    //                                sender:
+                    // SocketMessageSenderV2<CtlSerialMessageV2>?,
+                    //                                scope: CoroutineScope,
+                    //                            ) {
+                    //                                count ++;
+                    //                                Timber.d("doScanTest ${count}")
+                    //                                flag = true;
+                    //                            }
+                    //                        })
+                    //                }
+                    //                flag = false
+                    //            }
+                    //            Timber.d("doScanTest done")
+                    //            newProgress(workFlowAction)
+                    //            doNext()
+                    //        }
                 }
-
-                // 整片检测
-                val scanResult = CtlCommandsV2.readAllData(workFlowAction.cmd)
-                Timber.w("scanResult: $scanResult")
-
-                val scanSuccess = CtlCommandsV2.waitScanStatusSuccess()
-
-                // 等待进度更新完成（如果扫描先完成）
-                progressJob.await()
-
-                scanSuccess
-            }
-
-            if (!scanOk) {
-                return@launch
-            }
-
-            checkStep.value = 65
-            progress.value = 65F
-
-            doNext()
-
-            // TODO: 当前不使用检测的配置
-            // 查询是否扫码的配置
-//        sysConfig = SysConfigService.findBean(ConfigSysBean.PREFIX, ConfigSysBean::class)
-//        if(sysConfig!!.checkMethod == "whole") {
-//
-//        }else{
-//            // 切片检测
-//            val configBean = CardConfigConverter.fromEntity(cardConfig!!)
-//            val topList = configBean.topList;
-//            var flag = true
-//            var count = 0;
-//            while (count < topList.size) {
-//                if(flag) {
-//                    App.getCtlSerialService().send(
-//                        CtlCommandsV2.scanTest(
-//                            start = topList[count].start.toDouble().toInt(),
-//                            end = topList[count].end.toDouble().toInt(),
-//                            ppmm = cardConfig!!.scanPPMM,
-//                        ),
-//                        object : SerialMessageCallbackAdapterV2<CtlSerialMessageV2>() {
-//                            override suspend fun delay(
-//                                feedback: CtlSerialMessageV2,
-//                                sender: SocketMessageSenderV2<CtlSerialMessageV2>?,
-//                                scope: CoroutineScope,
-//                            ) {
-//
-//                            }
-//
-//                            override suspend fun error(
-//                                sender: SocketMessageSenderV2<CtlSerialMessageV2>?,
-//                                e: Exception?,
-//                                scope: CoroutineScope,
-//                            ) {
-//                                // TODO 硬件故障
-//                                actionState.value = ActionState(event = EVT_DEV_ERROR, msg = App.getContext().getString(R.string.work_ing_step5_error))
-//                                onClearInteraction()
-//                            }
-//
-//                            override suspend fun success(
-//                                feedback: CtlSerialMessageV2,
-//                                sender: SocketMessageSenderV2<CtlSerialMessageV2>?,
-//                                scope: CoroutineScope,
-//                            ) {
-//                                count ++;
-//                                Timber.d("doScanTest ${count}")
-//                                flag = true;
-//                            }
-//                        })
-//                }
-//                flag = false
-//            }
-//            Timber.d("doScanTest done")
-//            newProgress(workFlowAction)
-//            doNext()
-//        }
-        }
     }
 
     private fun doOpenXs(workFlowAction: WorkFlowActionV2) {
-        jobXs = viewModelScope.launch {
-            Timber.d("doOpenXs")
+        jobXs =
+                viewModelScope.launch {
+                    Timber.d("doOpenXs")
 
-            checkStep.value = 5
-            progress.value = 5F
+                    checkStep.value = 5
+                    progress.value = 5F
 
-            withContext(Dispatchers.IO) {
-                val moveToSsResult =
-                    CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, 88888, 10000, 0))
-                Timber.d("moveToSsResult: $moveToSsResult")
+                    withContext(Dispatchers.IO) {
+                        val moveToSsResult =
+                                CtlCommandsV2.readAllData(
+                                        CtlCommandsV2.moveToSs(0, 88888, 10000, 0)
+                                )
+                        Timber.d("moveToSsResult: $moveToSsResult")
 
-                // 等待成功
-                CtlCommandsV2.waitMoveToSsStatusSuccess()
-            }
-
-            // 反应中
-            showTotalTime.value = true
-            checkStep.value = 10
-            progress.value = 10F
-
-            // 进度从10到19的累计逻辑
-            val totalMillis = cardConfig!!.ft1 * 1000L
-            val startProgress = 10F
-            val endProgress = 19F
-            val progressRange = endProgress - startProgress
-
-            val updateInterval = 100L // 每100ms更新一次进度
-            val steps = totalMillis / updateInterval
-
-            if (steps > 0) {
-                val increment = progressRange / steps
-
-                for (i in 1..steps) {
-                    delay(updateInterval)
-                    progress.value = startProgress + (increment * i)
-                }
-            }
-
-            // 确保最终进度精确到19
-            progress.value = endProgress
-
-            if (cardConfig!!.xt1 > 0) {
-                // 吸水中
-                checkStep.value = 20
-                progress.value = 20F
-
-                withContext(Dispatchers.IO) {
-                    // 并发执行进度更新和吸水任务
-                    val progressJob = async {
-                        // 进度从20到49的累计逻辑
-                        val totalMillis = cardConfig!!.xt1 * 1000L
-                        val startProgress = 20F
-                        val endProgress = 49F
-                        val progressRange = endProgress - startProgress
-
-                        val updateInterval = 100L // 每100ms更新一次
-                        val steps = totalMillis / updateInterval
-
-                        if (steps > 0) {
-                            val increment = progressRange / steps
-                            for (i in 1..steps) {
-                                delay(updateInterval)
-                                val currentProgress = startProgress + (increment * i)
-                                progress.value = currentProgress.coerceAtMost(endProgress)
-                            }
-                        }
-                        // 确保最终进度精确到49
-                        progress.value = endProgress
+                        // 等待成功
+                        CtlCommandsV2.waitMoveToSsStatusSuccess()
                     }
 
+                    // 反应中
+                    showTotalTime.value = true
+                    checkStep.value = 10
+                    progress.value = 10F
 
-                    val absorbResult = CtlCommandsV2.readAllData(workFlowAction.cmd)
-                    Timber.w("absorbResult: $absorbResult")
+                    // 进度从10到19的累计逻辑
+                    val totalMillis = cardConfig!!.ft1 * 1000L
+                    val startProgress = 10F
+                    val endProgress = 19F
+                    val progressRange = endProgress - startProgress
 
-                    delay(cardConfig!!.xt1 * 1000L)
-                    CtlCommandsV2.waitAbsorbStatusSuccess()
+                    val updateInterval = 100L // 每100ms更新一次进度
+                    val steps = totalMillis / updateInterval
 
-                    // 等待进度更新完成
-                    progressJob.await()
+                    if (steps > 0) {
+                        val increment = progressRange / steps
+
+                        for (i in 1..steps) {
+                            delay(updateInterval)
+                            progress.value = startProgress + (increment * i)
+                        }
+                    }
+
+                    // 确保最终进度精确到19
+                    progress.value = endProgress
+
+                    if (cardConfig!!.xt1 > 0) {
+                        // 吸水中
+                        checkStep.value = 20
+                        progress.value = 20F
+
+                        withContext(Dispatchers.IO) {
+                            // 并发执行进度更新和吸水任务
+                            val progressJob = async {
+                                // 进度从20到49的累计逻辑
+                                val totalMillis = cardConfig!!.xt1 * 1000L
+                                val startProgress = 20F
+                                val endProgress = 49F
+                                val progressRange = endProgress - startProgress
+
+                                val updateInterval = 100L // 每100ms更新一次
+                                val steps = totalMillis / updateInterval
+
+                                if (steps > 0) {
+                                    val increment = progressRange / steps
+                                    for (i in 1..steps) {
+                                        delay(updateInterval)
+                                        val currentProgress = startProgress + (increment * i)
+                                        progress.value = currentProgress.coerceAtMost(endProgress)
+                                    }
+                                }
+                                // 确保最终进度精确到49
+                                progress.value = endProgress
+                            }
+
+                            val absorbResult = CtlCommandsV2.readAllData(workFlowAction.cmd)
+                            Timber.w("absorbResult: $absorbResult")
+
+                            delay(cardConfig!!.xt1 * 1000L)
+                            CtlCommandsV2.waitAbsorbStatusSuccess()
+
+                            // 等待进度更新完成
+                            progressJob.await()
+                        }
+                    } else {
+                        progress.value = 49F
+                    }
+
+                    showTotalTime.value = false
+                    Timber.d("doOpenXs done")
+
+                    //        newProgress(workFlowAction)
+
+                    // 打开吸水阀成功，进入下一步
+                    doNext()
                 }
-            } else {
-                progress.value = 49F
-            }
-
-            showTotalTime.value = false
-            Timber.d("doOpenXs done")
-
-//        newProgress(workFlowAction)
-
-            // 打开吸水阀成功，进入下一步
-            doNext()
-        }
     }
 
     private fun doMoveIn(workFlowAction: WorkFlowActionV2) {
@@ -1039,7 +1062,8 @@ class WorkMainViewModel : ViewModel() {
         // 分母（总步骤）+1，是因为最后多1个固定的移出仓门步骤
         if (workFlowActionSize() != 0) {
             progress.value =
-                ((100 * (workFlowActionIndex(workFlowAction) + 1) / (workFlowActionSize())).toFloat())
+                    ((100 * (workFlowActionIndex(workFlowAction) + 1) / (workFlowActionSize()))
+                            .toFloat())
         }
     }
 
@@ -1062,21 +1086,23 @@ class WorkMainViewModel : ViewModel() {
         viewModelScope.launch {
             Timber.d("doMoveOut")
 
-//        checkStep.value = 90
+            //        checkStep.value = 90
 
             withContext(Dispatchers.IO) {
                 val moveToSsResult =
-                    CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
+                        CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
                 Timber.w("moveToSsResult: $moveToSsResult")
 
                 // 等待成功
                 CtlCommandsV2.waitMoveToSsStatusSuccess()
 
                 if (cardConfig == null ||
-                    (cardConfig != null && cardConfig!!.ft0 >= 1 && action.value == ACTION_WORK)
+                                (cardConfig != null &&
+                                        cardConfig!!.ft0 >= 1 &&
+                                        action.value == ACTION_WORK)
                 ) {
                     val moveDurationResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, 88888, 900))
+                            CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, 88888, 900))
                     Timber.w("moveDurationResult: $moveDurationResult")
 
                     // 等待成功
@@ -1089,12 +1115,12 @@ class WorkMainViewModel : ViewModel() {
             checkStep.value = 100
             progress.value = 100F
 
-//        val moveDurationResult =
-//            CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, -88888, 5000))
-//        Timber.w("moveDurationResult: $moveDurationResult")
+            //        val moveDurationResult =
+            //            CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, -88888, 5000))
+            //        Timber.w("moveDurationResult: $moveDurationResult")
 
-//        // 等待成功
-//        CtlCommandsV2.waitMoveDurationStatusSuccess()
+            //        // 等待成功
+            //        CtlCommandsV2.waitMoveDurationStatusSuccess()
         }
     }
 
@@ -1110,80 +1136,80 @@ class WorkMainViewModel : ViewModel() {
         val list = ArrayList<WorkFlowActionV2>()
         // 等待反应界面
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_UI,
-                step = STEP_CASE,
-                time = cardConfig!!.ft0,
-                action = ACTION_CASE_WAIT
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_UI,
+                        step = STEP_CASE,
+                        time = cardConfig!!.ft0,
+                        action = ACTION_CASE_WAIT
+                )
         )
         // 移出仓门
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_SERIAL,
-                cmd = CtlCommandsV2.homing(),
-                time = -2,
-                step = STEP_CASE,
-                action = ACTION_CASE_WAIT
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_SERIAL,
+                        cmd = CtlCommandsV2.homing(),
+                        time = -2,
+                        step = STEP_CASE,
+                        action = ACTION_CASE_WAIT
+                )
         )
         // 打开放入样本界面
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_UI,
-                step = STEP_CASE,
-                time = -1,
-                action = ACTION_CASE_SAMPLE
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_UI,
+                        step = STEP_CASE,
+                        time = -1,
+                        action = ACTION_CASE_SAMPLE
+                )
         )
         // 移入仓门
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_SERIAL,
-                cmd = CtlCommandsV2.moveToSs(0, -88888, 10000, 1),
-                time = -2,
-                step = STEP_WORK,
-                action = ACTION_WORK
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_SERIAL,
+                        cmd = CtlCommandsV2.moveToSs(0, -88888, 10000, 1),
+                        time = -2,
+                        step = STEP_WORK,
+                        action = ACTION_WORK
+                )
         )
         // 等待反应
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_UI,
-                time = cardConfig!!.ft1,
-                step = STEP_WORK,
-                action = ACTION_WORK_WAIT
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_UI,
+                        time = cardConfig!!.ft1,
+                        step = STEP_WORK,
+                        action = ACTION_WORK_WAIT
+                )
         )
-//        // 打开吸水阀
-//        list.add(
-//            WorkFlowActionV2(
-//                type = WorkFlowActionV2.TYPE_SERIAL,
-//                cmd = CtlCommandsV2.openXs(xsTime = cardConfig!!.xt1, pos = 40),
-//                time = -2,
-//                step = STEP_WORK,
-//                action = ACTION_WORK
-//            )
-//        )
+        //        // 打开吸水阀
+        //        list.add(
+        //            WorkFlowActionV2(
+        //                type = WorkFlowActionV2.TYPE_SERIAL,
+        //                cmd = CtlCommandsV2.openXs(xsTime = cardConfig!!.xt1, pos = 40),
+        //                time = -2,
+        //                step = STEP_WORK,
+        //                action = ACTION_WORK
+        //            )
+        //        )
         // 开始扫描
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_SERIAL,
-                cmd = CtlCommandsV2.scan(-16000, scanDuration),
-                time = -2,
-                step = STEP_WORK,
-                action = ACTION_WORK
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_SERIAL,
+                        cmd = CtlCommandsV2.scan(-16000, scanDurationMillis()),
+                        time = -2,
+                        step = STEP_WORK,
+                        action = ACTION_WORK
+                )
         )
         // 读取数据
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_SERIAL,
-                cmd = CtlCommandsV2.queryData(),
-                time = -2,
-                step = STEP_WORK,
-                action = ACTION_WORK
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_SERIAL,
+                        cmd = CtlCommandsV2.queryData(),
+                        time = -2,
+                        step = STEP_WORK,
+                        action = ACTION_WORK
+                )
         )
         return WorkFlowV2(list)
     }
@@ -1192,61 +1218,61 @@ class WorkMainViewModel : ViewModel() {
         val list = ArrayList<WorkFlowActionV2>()
         // 样本滴入界面
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_UI,
-                step = STEP_CASE,
-                time = -1,
-                action = ACTION_CASE_SAMPLE
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_UI,
+                        step = STEP_CASE,
+                        time = -1,
+                        action = ACTION_CASE_SAMPLE
+                )
         )
         // 移入仓门
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_SERIAL,
-                cmd = CtlCommandsV2.moveToSs(0, -88888, 10000, 1),
-                time = -2,
-                step = STEP_WORK,
-                action = ACTION_WORK
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_SERIAL,
+                        cmd = CtlCommandsV2.moveToSs(0, -88888, 10000, 1),
+                        time = -2,
+                        step = STEP_WORK,
+                        action = ACTION_WORK
+                )
         )
         // 等待反应
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_UI,
-                time = cardConfig!!.ft1,
-                step = STEP_WORK,
-                action = ACTION_WORK_WAIT
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_UI,
+                        time = cardConfig!!.ft1,
+                        step = STEP_WORK,
+                        action = ACTION_WORK_WAIT
+                )
         )
-//        // 打开吸水阀
-//        list.add(
-//            WorkFlowActionV2(
-//                type = WorkFlowActionV2.TYPE_SERIAL,
-//                cmd = CtlCommandsV2.openXs(xsTime = cardConfig!!.xt1, pos = 40),
-//                time = -2,
-//                step = STEP_WORK,
-//                action = ACTION_WORK
-//            )
-//        )
+        //        // 打开吸水阀
+        //        list.add(
+        //            WorkFlowActionV2(
+        //                type = WorkFlowActionV2.TYPE_SERIAL,
+        //                cmd = CtlCommandsV2.openXs(xsTime = cardConfig!!.xt1, pos = 40),
+        //                time = -2,
+        //                step = STEP_WORK,
+        //                action = ACTION_WORK
+        //            )
+        //        )
         // 扫描检测
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_SERIAL,
-                cmd = CtlCommandsV2.scan(-16000, scanDuration),
-                time = -2,
-                step = STEP_WORK,
-                action = ACTION_WORK
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_SERIAL,
+                        cmd = CtlCommandsV2.scan(-16000, scanDurationMillis()),
+                        time = -2,
+                        step = STEP_WORK,
+                        action = ACTION_WORK
+                )
         )
         // 读取数据
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_SERIAL,
-                cmd = CtlCommandsV2.queryData(),
-                time = -2,
-                step = STEP_WORK,
-                action = ACTION_WORK
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_SERIAL,
+                        cmd = CtlCommandsV2.queryData(),
+                        time = -2,
+                        step = STEP_WORK,
+                        action = ACTION_WORK
+                )
         )
         return WorkFlowV2(list)
     }
@@ -1264,62 +1290,62 @@ class WorkMainViewModel : ViewModel() {
         // 1
         // 样品准备就位
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_UI,
-                time = 1,
-                step = STEP_CASE,
-                action = ACTION_CASE_WAIT
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_UI,
+                        time = 1,
+                        step = STEP_CASE,
+                        action = ACTION_CASE_WAIT
+                )
         )
 
         // 2
         // 确认开始检测
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_UI,
-                time = 1,
-                step = STEP_WORK,
-                action = ACTION_WORK
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_UI,
+                        time = 1,
+                        step = STEP_WORK,
+                        action = ACTION_WORK
+                )
         )
         // 开始检测
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_UI,
-                time = 1,
-                step = STEP_WORK,
-                action = ACTION_WORK_PROCESS
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_UI,
+                        time = 1,
+                        step = STEP_WORK,
+                        action = ACTION_WORK_PROCESS
+                )
         )
         // 打开吸水阀
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_SERIAL,
-                cmd = CtlCommandsV2.absorb(cardConfig!!.xt1 * 1000),
-                time = -2,
-                step = STEP_WORK,
-                action = ACTION_WORK_PROCESS
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_SERIAL,
+                        cmd = CtlCommandsV2.absorb(cardConfig!!.xt1 * 1000),
+                        time = -2,
+                        step = STEP_WORK,
+                        action = ACTION_WORK_PROCESS
+                )
         )
         // 扫描检测
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_SERIAL,
-                cmd = CtlCommandsV2.scan(-16000, scanDuration),
-                time = -2,
-                step = STEP_WORK,
-                action = ACTION_WORK_PROCESS
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_SERIAL,
+                        cmd = CtlCommandsV2.scan(-16000, scanDurationMillis()),
+                        time = -2,
+                        step = STEP_WORK,
+                        action = ACTION_WORK_PROCESS
+                )
         )
         // 读取数据
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_SERIAL,
-                cmd = CtlCommandsV2.queryData(),
-                time = -2,
-                step = STEP_WORK,
-                action = ACTION_WORK_PROCESS
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_SERIAL,
+                        cmd = CtlCommandsV2.queryData(),
+                        time = -2,
+                        step = STEP_WORK,
+                        action = ACTION_WORK_PROCESS
+                )
         )
         return WorkFlowV2(list)
     }
@@ -1329,101 +1355,101 @@ class WorkMainViewModel : ViewModel() {
         // 1
         // 加样后插入芯片
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_UI,
-                step = STEP_CASE,
-                time = cardConfig!!.ft0,
-                action = ACTION_CASE_WAIT
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_UI,
+                        step = STEP_CASE,
+                        time = cardConfig!!.ft0,
+                        action = ACTION_CASE_WAIT
+                )
         )
 
         // 2
         // 等待反应
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_UI,
-                time = 1,
-                step = STEP_WORK,
-                action = ACTION_WORK_WAIT
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_UI,
+                        time = 1,
+                        step = STEP_WORK,
+                        action = ACTION_WORK_WAIT
+                )
         )
         // 移出仓门
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_SERIAL,
-                cmd = CtlCommandsV2.homing(),
-                time = -2,
-                step = STEP_WORK,
-                action = ACTION_WORK_WAIT
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_SERIAL,
+                        cmd = CtlCommandsV2.homing(),
+                        time = -2,
+                        step = STEP_WORK,
+                        action = ACTION_WORK_WAIT
+                )
         )
 
         // 3
         // 样品准备就位
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_UI,
-                step = STEP_CASE,
-                time = cardConfig!!.ft0,
-                action = ACTION_CASE_WAIT
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_UI,
+                        step = STEP_CASE,
+                        time = cardConfig!!.ft0,
+                        action = ACTION_CASE_WAIT
+                )
         )
 
         // 4
         // 确认开始检测
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_UI,
-                time = 1,
-                step = STEP_WORK,
-                action = ACTION_WORK
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_UI,
+                        time = 1,
+                        step = STEP_WORK,
+                        action = ACTION_WORK
+                )
         )
         // 开始检测
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_UI,
-                time = 1,
-                step = STEP_WORK,
-                action = ACTION_WORK_PROCESS
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_UI,
+                        time = 1,
+                        step = STEP_WORK,
+                        action = ACTION_WORK_PROCESS
+                )
         )
         // 打开吸水阀
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_SERIAL,
-                cmd = CtlCommandsV2.absorb(cardConfig!!.xt1 * 1000),
-                time = -2,
-                step = STEP_WORK,
-                action = ACTION_WORK_PROCESS
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_SERIAL,
+                        cmd = CtlCommandsV2.absorb(cardConfig!!.xt1 * 1000),
+                        time = -2,
+                        step = STEP_WORK,
+                        action = ACTION_WORK_PROCESS
+                )
         )
         // 扫描检测
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_SERIAL,
-                cmd = CtlCommandsV2.scan(-16000, scanDuration),
-                time = -2,
-                step = STEP_WORK,
-                action = ACTION_WORK_PROCESS
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_SERIAL,
+                        cmd = CtlCommandsV2.scan(-16000, scanDurationMillis()),
+                        time = -2,
+                        step = STEP_WORK,
+                        action = ACTION_WORK_PROCESS
+                )
         )
         // 读取数据
         list.add(
-            WorkFlowActionV2(
-                type = WorkFlowActionV2.TYPE_SERIAL,
-                cmd = CtlCommandsV2.queryData(),
-                time = -2,
-                step = STEP_WORK,
-                action = ACTION_WORK_PROCESS
-            )
+                WorkFlowActionV2(
+                        type = WorkFlowActionV2.TYPE_SERIAL,
+                        cmd = CtlCommandsV2.queryData(),
+                        time = -2,
+                        step = STEP_WORK,
+                        action = ACTION_WORK_PROCESS
+                )
         )
         return WorkFlowV2(list)
     }
 
     // 样本页放入样本上一步
     fun onActionCaseSamplePre() {
-//        updateAction(ACTION_CASE_CHIP)
+        //        updateAction(ACTION_CASE_CHIP)
 
         // 更新新的操作状态
         updateAction(ACTION_START)
@@ -1433,12 +1459,12 @@ class WorkMainViewModel : ViewModel() {
     fun onActionCaseSampleNext() {
         Timber.d("onActionCaseSampleNext")
         actionState.value =
-            ActionState(EVT_LOADING, App.getContext().getString(R.string.work_read_chip))
+                ActionState(EVT_LOADING, App.getContext().getString(R.string.work_read_chip))
 
         loadCard()
 
-//            // 放入样本成功，进入下一步
-//            doNext()
+        //            // 放入样本成功，进入下一步
+        //            doNext()
     }
 
     // 样本页放入样本上一步
@@ -1462,61 +1488,70 @@ class WorkMainViewModel : ViewModel() {
 
         if (AppParams.curUser.role != User.ROLE_DEV) {
             if (!AppFormValidateUtils.validateRequired(name)) {
-                actionState.value = ActionState(
-                    EVT_DEV_ERROR,
-                    App.getContext().getString(R.string.msg_user_name_required)
-                )
+                actionState.value =
+                        ActionState(
+                                EVT_DEV_ERROR,
+                                App.getContext().getString(R.string.msg_user_name_required)
+                        )
                 return false
             }
             if (!AppFormValidateUtils.validateRequired(birthday)) {
-                actionState.value = ActionState(
-                    EVT_DEV_ERROR,
-                    App.getContext().getString(R.string.msg_user_birthday_required)
-                )
+                actionState.value =
+                        ActionState(
+                                EVT_DEV_ERROR,
+                                App.getContext().getString(R.string.msg_user_birthday_required)
+                        )
                 return false
             }
-        } else {
+        } else if (!isTestModeEnabled()) {
             if (sysConfig.value.scan == "n" && !AppFormValidateUtils.validateRequired(qrCode)) {
-                actionState.value = ActionState(
-                    EVT_DEV_ERROR,
-                    App.getContext().getString(R.string.msg_user_qrcode_required)
-                )
+                actionState.value =
+                        ActionState(
+                                EVT_DEV_ERROR,
+                                App.getContext().getString(R.string.msg_user_qrcode_required)
+                        )
                 return false
             }
         }
         return true
     }
 
-    /**
-     * 加载卡片信息
-     */
+    /** 加载卡片信息 */
     private fun loadCard() {
         viewModelScope.launch {
-            if (sysConfig.value.scan == "y" || sysConfig.value.scan.isEmpty()
-                || AppParams.curUser.role != User.ROLE_DEV
+            if (isTestModeEnabled()) {
+                startTestModeLocalCard()
+                return@launch
+            }
+
+            if (sysConfig.value.scan == "y" ||
+                            sysConfig.value.scan.isEmpty() ||
+                            AppParams.curUser.role != User.ROLE_DEV
             ) {
                 // 判断卡片是否插到位
-                val gpioReadResult = withContext(Dispatchers.IO) {
-                    CtlCommandsV2.readAllData(CtlCommandsV2.gpioRead())
-                }
+                val gpioReadResult =
+                        withContext(Dispatchers.IO) {
+                            CtlCommandsV2.readAllData(CtlCommandsV2.gpioRead())
+                        }
                 Timber.d("gpioReadResult: $gpioReadResult")
 
-                val hasCard = withContext(Dispatchers.IO) {
-                    CtlCommandsV2.gpioReadHasCard(gpioReadResult)
-                }
+                val hasCard =
+                        withContext(Dispatchers.IO) {
+                            CtlCommandsV2.gpioReadHasCard(gpioReadResult)
+                        }
                 if (!hasCard) {
                     actionState.value =
-                        ActionState(
-                            EVT_DEV_ERROR,
-                            App.getContext()
-                                .getString(R.string.work_case_put_chip_tip)
-                        )
+                            ActionState(
+                                    EVT_DEV_ERROR,
+                                    App.getContext().getString(R.string.work_case_put_chip_tip)
+                            )
                     return@launch
                 } else {
                     // 扫描二维码
-                    val readQRResult = withContext(Dispatchers.IO) {
-                        CtlCommandsV2.readAllData(CtlCommandsV2.readQR())
-                    }
+                    val readQRResult =
+                            withContext(Dispatchers.IO) {
+                                CtlCommandsV2.readAllData(CtlCommandsV2.readQR())
+                            }
                     Timber.d("readQRResult: $readQRResult")
                 }
             }
@@ -1527,10 +1562,9 @@ class WorkMainViewModel : ViewModel() {
     }
 
     private fun readQrSuccess() {
-        if (
-            sysConfig.value.scan == "y"
-            || sysConfig.value.scan.isEmpty()
-            || AppParams.curUser.role != User.ROLE_DEV
+        if (sysConfig.value.scan == "y" ||
+                        sysConfig.value.scan.isEmpty() ||
+                        AppParams.curUser.role != User.ROLE_DEV
         ) {
             CtlCommandsV2.processReadQRStatus { scanQrSuccessCustomFunction(it) }
         } else {
@@ -1538,13 +1572,41 @@ class WorkMainViewModel : ViewModel() {
         }
     }
 
+    private suspend fun startTestModeLocalCard() {
+        continueSacn.value = false
+        val testModeConfig = withContext(Dispatchers.IO) { TestModeConfigService.findBean() }
+        activeTestModeConfig = testModeConfig
+        val cardInfo = TestModeConfigService.buildLocalCardInfo(testModeCardCode, testModeConfig)
+        val cardBatchCode = cardInfo.cardBatch.code
+
+        onBeanUpdate(
+                bean.value.copy(
+                        reagentId = cardBatchCode,
+                        type = cardInfo.cardBatch.type,
+                        qrCode = testModeCardCode,
+                        caseId = cardInfo.card.id.ifEmpty { AppTypeUtils.findCardId(testModeCardCode) },
+                        cardInfo = cardInfo,
+                )
+        )
+
+        cardConfig = cardInfo.cardConfig
+        curCardConfig.value = cardConfig!!
+        showCutOff2Time.value = curCardConfig.value.cutOff2 > 0
+        skipCurrentCutOff2Wait.value = false
+
+        val workFlowTmp = genWorkFlowV2()
+        if (workFlowTmp != null) {
+            workFlow = workFlowTmp
+            doNext()
+            onClearInteraction()
+        }
+    }
+
     private fun scanQrSuccessCustomFunction(qrCodeData: String) {
         viewModelScope.launch {
             Timber.w("======qrCodeData $qrCodeData")
             if (qrCodeData.isEmpty() && continueSacn.value) {
-                withContext(Dispatchers.IO) {
-                    readQrSuccess()
-                }
+                withContext(Dispatchers.IO) { readQrSuccess() }
             } else {
                 Timber.d("scanQrSuccessCustomFunction done")
                 val cardCode = qrCodeData
@@ -1552,21 +1614,19 @@ class WorkMainViewModel : ViewModel() {
 
                 if (cardCode == CtlConstantsV2.CMD_ACTION_READ_QR_RESULT_NULL) {
                     actionState.value =
-                        ActionState(
-                            EVT_DEV_ERROR,
-                            App.getContext()
-                                .getString(R.string.work_read_chip_error1)
-                        )
+                            ActionState(
+                                    EVT_DEV_ERROR,
+                                    App.getContext().getString(R.string.work_read_chip_error1)
+                            )
                     return@launch
                 }
 
                 if (cardCode.isEmpty()) {
                     actionState.value =
-                        ActionState(
-                            EVT_DEV_ERROR,
-                            App.getContext()
-                                .getString(R.string.work_read_chip_error1)
-                        )
+                            ActionState(
+                                    EVT_DEV_ERROR,
+                                    App.getContext().getString(R.string.work_read_chip_error1)
+                            )
                     return@launch
                 }
                 Timber.w("++++++++++${cardCode}")
@@ -1579,45 +1639,46 @@ class WorkMainViewModel : ViewModel() {
                     return@launch
                 }
 
-//                // 先读取本地
-//                if (AppParams.curUser.role != User.ROLE_DEV) {
-//                    val case: Case? = withContext(Dispatchers.IO) {
-//                        CaseService.findByCardCode(cardCode)
-//                    }
-//                    if (case != null) {
-//                        Timber.w("case 已存在 ${case.qrCode}")
-//                        if (AppParams.removeReport || AppParams.devMock) {
-//                            withContext(Dispatchers.IO) {
-//                                // 更新试剂卡状态
-//                                SbEdgeFunc.updateCardStatus(cardCode, CardStatus.ACTIVE.statusVal)
-//
-//                                CaseService.delete(case)
-//                            }
-//                        }
-//
-//                        val caseBean: CaseBean = CaseConverter.fromEntity(case)
-//
-//                        onBeanUpdate(
-//                            bean.value.copy(
-//                                name = caseBean.name,
-//                                gender = caseBean.gender,
-//                                birthday = caseBean.birthday,
-//                                reagentId = caseBean.reagentId,
-//                                type = caseBean.type,
-//                                qrCode = cardCode,
-//                                caseId = caseBean.caseId,
-//                                workResult = caseBean.workResult,
-//                                workPoints = caseBean.workPoints,
-//                                workTime = caseBean.workTime
-//                            )
-//                        )
-//                        onWorkDone()
-//
-//                        // 移除仓门
-//                        doMoveOut()
-//                        return@launch
-//                    }
-//                }
+                //                // 先读取本地
+                //                if (AppParams.curUser.role != User.ROLE_DEV) {
+                //                    val case: Case? = withContext(Dispatchers.IO) {
+                //                        CaseService.findByCardCode(cardCode)
+                //                    }
+                //                    if (case != null) {
+                //                        Timber.w("case 已存在 ${case.qrCode}")
+                //                        if (AppParams.removeReport || AppParams.devMock) {
+                //                            withContext(Dispatchers.IO) {
+                //                                // 更新试剂卡状态
+                //                                SbEdgeFunc.updateCardStatus(cardCode,
+                // CardStatus.ACTIVE.statusVal)
+                //
+                //                                CaseService.delete(case)
+                //                            }
+                //                        }
+                //
+                //                        val caseBean: CaseBean = CaseConverter.fromEntity(case)
+                //
+                //                        onBeanUpdate(
+                //                            bean.value.copy(
+                //                                name = caseBean.name,
+                //                                gender = caseBean.gender,
+                //                                birthday = caseBean.birthday,
+                //                                reagentId = caseBean.reagentId,
+                //                                type = caseBean.type,
+                //                                qrCode = cardCode,
+                //                                caseId = caseBean.caseId,
+                //                                workResult = caseBean.workResult,
+                //                                workPoints = caseBean.workPoints,
+                //                                workTime = caseBean.workTime
+                //                            )
+                //                        )
+                //                        onWorkDone()
+                //
+                //                        // 移除仓门
+                //                        doMoveOut()
+                //                        return@launch
+                //                    }
+                //                }
 
                 // 从芯片二维码查找项目类型
                 var type: String? = null
@@ -1636,90 +1697,94 @@ class WorkMainViewModel : ViewModel() {
                 }
                 if (type == null) {
                     actionState.value =
-                        ActionState(
-                            EVT_DEV_ERROR,
-                            App.getContext()
-                                .getString(R.string.work_read_chip_error2)
-                        )
+                            ActionState(
+                                    EVT_DEV_ERROR,
+                                    App.getContext().getString(R.string.work_read_chip_error2)
+                            )
                     return@launch
                 }
 
                 val httpUtil = HttpUtils()
-                if (
-                    !withContext(Dispatchers.IO) {
-                        httpUtil.checkConnectivity(SbEdgeFunc.getDomain())
-                    }
+                if (!withContext(Dispatchers.IO) {
+                            httpUtil.checkConnectivity(SbEdgeFunc.getDomain())
+                        }
                 ) {
-                    actionState.value = ActionState(
-                        event = EVT_DEV_ERROR_NETWORK,
-                        msg = App.getContext().getString(R.string.wlan_not_connect)
-                    )
+                    actionState.value =
+                            ActionState(
+                                    event = EVT_DEV_ERROR_NETWORK,
+                                    msg = App.getContext().getString(R.string.wlan_not_connect)
+                            )
                     return@launch
                 }
 
-                val cardInfo = withContext(Dispatchers.IO) {
-                    SbEdgeFunc.getCardInfo(cardBatchCode, cardCode)
-                }
+                val cardInfo =
+                        withContext(Dispatchers.IO) {
+                            SbEdgeFunc.getCardInfo(cardBatchCode, cardCode)
+                        }
 
                 if (cardCode != cardInfo.card.code) {
-                    actionState.value = ActionState(
-                        event = EVT_DEV_ERROR,
-                        msg = App.getContext().getString(R.string.report_card_undefined)
-                    )
+                    actionState.value =
+                            ActionState(
+                                    event = EVT_DEV_ERROR,
+                                    msg = App.getContext().getString(R.string.report_card_undefined)
+                            )
                     return@launch
                 }
 
                 if (cardInfo.card.status == CardStatus.INACTIVE.statusVal) {
-                    actionState.value = ActionState(
-                        event = EVT_DEV_ERROR,
-                        msg = App.getContext().getString(R.string.report_card_undefined)
-                    )
+                    actionState.value =
+                            ActionState(
+                                    event = EVT_DEV_ERROR,
+                                    msg = App.getContext().getString(R.string.report_card_undefined)
+                            )
                     return@launch
                 }
 
                 // 更新芯片查询到的数据
                 onBeanUpdate(
-                    bean.value.copy(
-                        reagentId = cardBatchCode,
-                        type = type,
-                        qrCode = cardCode,
-                        caseId = cardId,
-                        cardInfo = cardInfo
-                    )
+                        bean.value.copy(
+                                reagentId = cardBatchCode,
+                                type = type,
+                                qrCode = cardCode,
+                                caseId = cardId,
+                                cardInfo = cardInfo
+                        )
                 )
 
-                cardConfig = bean.value.cardInfo.cardConfig
+                cardConfig = applyTestModeConfigOverride(bean.value.cardInfo.cardConfig)
                 curCardConfig.value = cardConfig!!
 
                 // 读取服务端报告信息
-                val frosData = withContext(Dispatchers.IO) {
-                    FrosApi.getPatientCaseReport(cardCode)
-                }
+                val frosData =
+                        withContext(Dispatchers.IO) { FrosApi.getPatientCaseReport(cardCode) }
 
                 showCutOff2Time.value = curCardConfig.value.cutOff2 > 0
                 skipCurrentCutOff2Wait.value =
-                    AppParams.runtimeModeState.consumeVenueContinueCutOffWaitSkip()
+                        AppParams.runtimeModeState.consumeVenueContinueCutOffWaitSkip()
 
-                if (frosData.qrCode.isEmpty()) {
-                    actionState.value = ActionState(
-                        event = EVT_DEV_ERROR,
-                        msg = App.getContext().getString(R.string.report_card_not_bind)
-                    )
+                if (!isTestModeEnabled() && frosData.qrCode.isEmpty()) {
+                    actionState.value =
+                            ActionState(
+                                    event = EVT_DEV_ERROR,
+                                    msg = App.getContext().getString(R.string.report_card_not_bind)
+                            )
                     return@launch
                 }
 
-                onBeanUpdate(
-                    bean.value.copy(
-                        patientId = frosData.patientId,
-                        name = frosData.name,
-                        gender = frosData.gender,
-                        birthday = frosData.birthday,
+                if (frosData.qrCode.isNotEmpty()) {
+                    onBeanUpdate(
+                            bean.value.copy(
+                                    patientId = frosData.patientId,
+                                    name = frosData.name,
+                                    gender = frosData.gender,
+                                    birthday = frosData.birthday,
+                            )
                     )
-                )
+                }
 
                 if (cardInfo.card.status == CardStatus.SUCCESS.statusVal) {
                     val baaResultResp: BaaResultResp? =
-                        SbEdgeFunc.baaResult(bean.value.qrCode, bean.value.patientId)
+                            SbEdgeFunc.baaResult(bean.value.qrCode, bean.value.patientId)
 
                     val resultList = frosData.resultList
                     if (baaResultResp != null) {
@@ -1737,31 +1802,29 @@ class WorkMainViewModel : ViewModel() {
                         resultList[0].radioValue = assessResultStr
 
                         onBeanUpdate(
-                            bean.value.copy(
-                                type = frosData.type,
-                                qrCode = cardCode,
-                                workPoints = frosData.workPoints,
-                                workTime = frosData.workTime,
-                                workResult = Json.encodeToString(resultList),
-                                baaResult = baaResult,
-                                baaAssets = baaResultResp.assets!!,
-                            )
+                                bean.value.copy(
+                                        type = frosData.type,
+                                        qrCode = cardCode,
+                                        workPoints = frosData.workPoints,
+                                        workTime = frosData.workTime,
+                                        workResult = Json.encodeToString(resultList),
+                                        baaResult = baaResult,
+                                        baaAssets = baaResultResp.assets!!,
+                                )
                         )
                     } else {
                         onBeanUpdate(
-                            bean.value.copy(
-                                type = frosData.type,
-                                qrCode = cardCode,
-                                workPoints = frosData.workPoints,
-                                workTime = frosData.workTime,
-                                workResult = Json.encodeToString(resultList),
-                            )
+                                bean.value.copy(
+                                        type = frosData.type,
+                                        qrCode = cardCode,
+                                        workPoints = frosData.workPoints,
+                                        workTime = frosData.workTime,
+                                        workResult = Json.encodeToString(resultList),
+                                )
                         )
                     }
 
-                    withContext(Dispatchers.IO) {
-                        saveCase(bean.value)
-                    }
+                    withContext(Dispatchers.IO) { saveCase(bean.value) }
                     onWorkDone()
 
                     // 移除仓门
@@ -1794,144 +1857,188 @@ class WorkMainViewModel : ViewModel() {
         val keys = biomarkerKeys?.toSet() ?: return null
         return when {
             keys == setOf("hsCRP") -> CaseBean.TYPE_BIOAGE_CRP
-            else -> null  // unknown panel — caller must handle
+            else -> null // unknown panel — caller must handle
         }
     }
 
     /** Map nano chip_config (server-authoritative scan params) to kone CardConfig. */
-    private fun nanoChipConfigToCardConfig(c: NanoChipConfig): CardConfig = CardConfig(
-        scanPPMM = c.scanPpmm,
-        topList  = c.topList.map {
-            poct.device.app.thirdparty.model.sbedge.resp.CardConfigTop(
-                id = it.id ?: "", start = it.start, end = it.end,
-                ctrl = it.ctrl ?: "", name = it.name ?: ""
+    private fun nanoChipConfigToCardConfig(c: NanoChipConfig): CardConfig =
+            CardConfig(
+                    scanPPMM = c.scanPpmm,
+                    topList =
+                            c.topList.map {
+                                poct.device.app.thirdparty.model.sbedge.resp.CardConfigTop(
+                                        id = it.id ?: "",
+                                        start = it.start,
+                                        end = it.end,
+                                        ctrl = it.ctrl ?: "",
+                                        name = it.name ?: ""
+                                )
+                            },
+                    varList =
+                            c.varList.map {
+                                poct.device.app.thirdparty.model.sbedge.resp.CardConfigVar(
+                                        id = it.id ?: "",
+                                        type = "",
+                                        start = it.start,
+                                        end = it.end,
+                                        x0 = it.x0,
+                                        x1 = it.x1,
+                                        x2 = 0.0,
+                                        x3 = 0.0,
+                                        x4 = 0.0
+                                )
+                            },
+                    ft0 = c.ft0,
+                    xt1 = c.xt1,
+                    ft1 = c.ft1,
+                    scope = c.scope,
+                    typeScore = c.typeScore,
+                    cAvg = c.cAvg,
+                    cStd = c.cStd,
+                    cMin = c.cMin,
+                    cMax = c.cMax,
+                    cutOff1 = c.cutOff1,
+                    cutOff2 = c.cutOff2,
+                    cutOff3 = c.cutOff3,
+                    cutOff4 = c.cutOff4,
+                    cutOff5 = c.cutOff5,
+                    cutOff6 = c.cutOff6,
+                    cutOff7 = c.cutOff7,
+                    cutOff8 = c.cutOff8,
+                    cutOffMax = c.cutOffMax,
+                    noise1 = c.noise1,
+                    noise2 = c.noise2,
+                    noise3 = c.noise3,
+                    noise4 = c.noise4,
+                    noise5 = c.noise5,
             )
-        },
-        varList  = c.varList.map {
-            poct.device.app.thirdparty.model.sbedge.resp.CardConfigVar(
-                id = it.id ?: "", type = "", start = it.start, end = it.end,
-                x0 = it.x0, x1 = it.x1, x2 = 0.0, x3 = 0.0, x4 = 0.0
-            )
-        },
-        ft0 = c.ft0, xt1 = c.xt1, ft1 = c.ft1,
-        scope = c.scope, typeScore = c.typeScore,
-        cAvg = c.cAvg, cStd = c.cStd, cMin = c.cMin, cMax = c.cMax,
-        cutOff1 = c.cutOff1, cutOff2 = c.cutOff2, cutOff3 = c.cutOff3, cutOff4 = c.cutOff4,
-        cutOff5 = c.cutOff5, cutOff6 = c.cutOff6, cutOff7 = c.cutOff7, cutOff8 = c.cutOff8,
-        cutOffMax = c.cutOffMax,
-        noise1 = c.noise1, noise2 = c.noise2, noise3 = c.noise3, noise4 = c.noise4, noise5 = c.noise5,
-    )
 
-    /** Adapt nano BioAge profile into the legacy BaaResult shape so the
-     *  existing report UI keeps rendering until the simulator overlay is ported. */
-    private fun NanoBioAgeProfile.toBaaResult(): BaaResult = BaaResult(
-        bioAgeProfile = BioAgeProfile(
-            chronoAge     = chronoAge,
-            bioAge        = bioAge,
-            ageDifference = ageDifference,
-            scores = mapOf(
-                "Resilience"    to (scores?.resilience    ?: 0.0),
-                "Cellular"      to (scores?.cellular      ?: 0.0),
-                "Metabolic"     to (scores?.metabolic     ?: 0.0),
-                "MicroVascular" to (scores?.microVascular ?: 0.0),
+    /**
+     * Adapt nano BioAge profile into the legacy BaaResult shape so the existing report UI keeps
+     * rendering until the simulator overlay is ported.
+     */
+    private fun NanoBioAgeProfile.toBaaResult(): BaaResult =
+            BaaResult(
+                    bioAgeProfile =
+                            BioAgeProfile(
+                                    chronoAge = chronoAge,
+                                    bioAge = bioAge,
+                                    ageDifference = ageDifference,
+                                    scores =
+                                            mapOf(
+                                                    "Resilience" to (scores?.resilience ?: 0.0),
+                                                    "Cellular" to (scores?.cellular ?: 0.0),
+                                                    "Metabolic" to (scores?.metabolic ?: 0.0),
+                                                    "MicroVascular" to
+                                                            (scores?.microVascular ?: 0.0),
+                                            )
+                            )
             )
-        )
-    )
 
-    /** Pluck named biomarker values out of the post-scan result list, filtered
-     *  to only the keys this chip is expected to produce. */
+    /**
+     * Pluck named biomarker values out of the post-scan result list, filtered to only the keys this
+     * chip is expected to produce.
+     */
     private fun extractTestData(
-        biomarkerKeys: List<String>?,
-        resultList: List<CaseResult>
+            biomarkerKeys: List<String>?,
+            resultList: List<CaseResult>
     ): Map<String, Double> {
         val keys = biomarkerKeys?.toSet() ?: return emptyMap()
         return resultList
-            .filter { it.name in keys }
-            .mapNotNull { r ->
-                r.result.toDoubleOrNull()
-                    ?.takeIf { it.isFinite() }
-                    ?.let { r.name to it }
-            }
-            .toMap()
+                .filter { it.name in keys }
+                .mapNotNull { r ->
+                    r.result.toDoubleOrNull()?.takeIf { it.isFinite() }?.let { r.name to it }
+                }
+                .toMap()
     }
 
-    /** Nano-flow chip lookup: replaces `SbEdgeFunc.getCardInfo` +
-     *  `FrosApi.getPatientCaseReport` with a single `NanoApi.getChip`. */
+    /**
+     * Nano-flow chip lookup: replaces `SbEdgeFunc.getCardInfo` + `FrosApi.getPatientCaseReport`
+     * with a single `NanoApi.getChip`.
+     */
     private suspend fun handleNanoChipScan(cardCode: String) {
         val chipResp: NanoChipResp? = NanoApi.getChip(cardCode)
         if (chipResp == null) {
-            actionState.value = ActionState(
-                event = EVT_DEV_ERROR_NETWORK,
-                msg = App.getContext().getString(R.string.wlan_not_connect)
-            )
+            actionState.value =
+                    ActionState(
+                            event = EVT_DEV_ERROR_NETWORK,
+                            msg = App.getContext().getString(R.string.wlan_not_connect)
+                    )
             return
         }
-        if (!chipResp.found) {
-            actionState.value = ActionState(
-                event = EVT_DEV_ERROR,
-                msg = App.getContext().getString(R.string.report_card_not_bind)
-            )
+        if (!isTestModeEnabled() && !chipResp.found) {
+            actionState.value =
+                    ActionState(
+                            event = EVT_DEV_ERROR,
+                            msg = App.getContext().getString(R.string.report_card_not_bind)
+                    )
             return
         }
-        if (chipResp.used) {
-            actionState.value = ActionState(
-                event = EVT_DEV_ERROR,
-                msg = App.getContext().getString(R.string.report_card_undefined)
-            )
+        if (!isTestModeEnabled() && chipResp.used) {
+            actionState.value =
+                    ActionState(
+                            event = EVT_DEV_ERROR,
+                            msg = App.getContext().getString(R.string.report_card_undefined)
+                    )
             return
         }
         val nanoCardConfig = chipResp.chipConfig
         if (nanoCardConfig == null) {
-            actionState.value = ActionState(
-                event = EVT_DEV_ERROR,
-                msg = App.getContext().getString(R.string.report_card_undefined)
-            )
+            actionState.value =
+                    ActionState(
+                            event = EVT_DEV_ERROR,
+                            msg = App.getContext().getString(R.string.report_card_undefined)
+                    )
             return
         }
         val type = nanoTypeFor(chipResp.biomarkerKeys)
         if (type == null) {
-            actionState.value = ActionState(
-                event = EVT_DEV_ERROR,
-                msg = App.getContext().getString(R.string.work_read_chip_error2)
-            )
+            actionState.value =
+                    ActionState(
+                            event = EVT_DEV_ERROR,
+                            msg = App.getContext().getString(R.string.work_read_chip_error2)
+                    )
             return
         }
 
         val cardBatchCode = AppTypeUtils.findCardBatchCode(cardCode)
-        val cardId        = AppTypeUtils.findCardId(cardCode)
-        val cardInfo = CardInfoBean(
-            card = Card(code = cardCode, status = CardStatus.ACTIVE.statusVal),
-            cardBatch = CardBatch(
-                code = cardBatchCode,
-                guideVideo = chipResp.guideVideo,
-                guideText  = chipResp.guideText,
-            ),
-            cardConfig = nanoChipConfigToCardConfig(nanoCardConfig),
-        )
+        val cardId = AppTypeUtils.findCardId(cardCode)
+        val cardInfo =
+                CardInfoBean(
+                        card = Card(code = cardCode, status = CardStatus.ACTIVE.statusVal),
+                        cardBatch =
+                                CardBatch(
+                                        code = cardBatchCode,
+                                        guideVideo = chipResp.guideVideo,
+                                        guideText = chipResp.guideText,
+                                ),
+                        cardConfig = nanoChipConfigToCardConfig(nanoCardConfig),
+                )
 
         nanoBiomarkerKeys = chipResp.biomarkerKeys
         nanoChipKeys.value = chipResp.biomarkerKeys
         nanoReport.value = null
 
         onBeanUpdate(
-            bean.value.copy(
-                reagentId = cardBatchCode,
-                type      = type,
-                qrCode    = cardCode,
-                caseId    = cardId,
-                cardInfo  = cardInfo,
-                patientId = chipResp.userId ?: "",
-                name      = chipResp.nickname ?: bean.value.name,
-                birthday  = chipResp.birthDate ?: bean.value.birthday,
-                gender    = if (chipResp.gender == "female") 2 else 1,
-            )
+                bean.value.copy(
+                        reagentId = cardBatchCode,
+                        type = type,
+                        qrCode = cardCode,
+                        caseId = cardId,
+                        cardInfo = cardInfo,
+                        patientId = chipResp.userId ?: "",
+                        name = chipResp.nickname ?: bean.value.name,
+                        birthday = chipResp.birthDate ?: bean.value.birthday,
+                        gender = if (chipResp.gender == "female") 2 else 1,
+                )
         )
 
-        cardConfig = bean.value.cardInfo.cardConfig
+        cardConfig = applyTestModeConfigOverride(bean.value.cardInfo.cardConfig)
         curCardConfig.value = cardConfig!!
         showCutOff2Time.value = curCardConfig.value.cutOff2 > 0
         skipCurrentCutOff2Wait.value =
-            AppParams.runtimeModeState.consumeVenueContinueCutOffWaitSkip()
+                AppParams.runtimeModeState.consumeVenueContinueCutOffWaitSkip()
 
         val workFlowTmp = genWorkFlowV2()
         if (workFlowTmp != null) {
@@ -1941,6 +2048,54 @@ class WorkMainViewModel : ViewModel() {
         }
     }
 
+    private fun isTestModeEnabled(): Boolean {
+        return AppParams.runtimeModeState.testModeEnabled.value
+    }
+
+    private suspend fun applyTestModeConfigOverride(config: CardConfig): CardConfig {
+        if (!isTestModeEnabled()) {
+            return config
+        }
+        val testModeConfig = withContext(Dispatchers.IO) { TestModeConfigService.findBean() }
+        activeTestModeConfig = testModeConfig
+        return TestModeConfigService.applyConfig(
+                config = config,
+                absorbTimeMillis = testModeConfig.absorbTimeMillis,
+                reactionTimeSeconds = testModeConfig.reactionTimeSeconds,
+                laserPower = testModeConfig.laserPower
+        )
+    }
+
+    private fun scanDurationMillis(): Int {
+        if (!isTestModeEnabled()) {
+            return scanDuration
+        }
+        return TestModeConfigService.normalizeScanTimeMillis(activeTestModeConfig.scanTimeMillis)
+                .toInt()
+    }
+
+    private fun buildTestModeReportBean(
+            pointList: ArrayList<CasePoint>,
+            workResult: String = bean.value.workResult,
+    ): CaseBean {
+        return bean.value.copy(
+                patientId = bean.value.patientId.ifEmpty { "test-mode" },
+                name = bean.value.name.ifEmpty { "Test User" },
+                birthday = bean.value.birthday.ifEmpty { "1970-01-01" },
+                caseId = bean.value.caseId.ifEmpty { testModeCardCode },
+                qrCode = testModeCardCode,
+                reagentId =
+                        bean.value.reagentId.ifEmpty {
+                            AppTypeUtils.findCardBatchCode(testModeCardCode)
+                        },
+                type = CaseBean.TYPE_CRP,
+                workResult = workResult,
+                workPoints = Json.encodeToString(pointList),
+                workTime = AppLocalDateUtils.formatDateTime(LocalDateTime.now()),
+                cardInfo = bean.value.cardInfo,
+        )
+    }
+
     private fun convertToPointList(dataMap: LinkedHashMap<String, String>): ArrayList<CasePoint> {
         val list = ArrayList<Int>()
         val keyIntList = TreeSet(dataMap.keys.map { it.toInt() })
@@ -1948,14 +2103,14 @@ class WorkMainViewModel : ViewModel() {
             val data = dataMap[keyInt.toString()]!!
 
             // TODO 串口失联时，补救逻辑
-//            if (AppParams.devMock) {
-//                val split = data.split("|")
-//                list.addAll(split.map { it.toInt() })
-//            } else {
+            //            if (AppParams.devMock) {
+            //                val split = data.split("|")
+            //                list.addAll(split.map { it.toInt() })
+            //            } else {
             // 使用base64解析数据
             val dataBytes: ByteArray = Base64.getDecoder().decode(data)
             list.addAll(dataBytes.toListOfInts())
-//            }
+            //            }
         }
         Timber.w("======上传的数据${App.gson.toJson(list)}")
         Timber.w("======上传数据数量${list.size}")
@@ -2007,47 +2162,36 @@ class WorkMainViewModel : ViewModel() {
             CaseBean.TYPE_4LJ -> {
                 return AppCardUtils.genResultFor4LJ(actionState, cardConfig!!, bean, pointList)
             }
-
             CaseBean.TYPE_IGE -> {
                 return AppCardUtils.genResultForIge(actionState, cardConfig!!, bean, pointList)
             }
-
             CaseBean.TYPE_CRP -> {
                 return AppCardUtils.genResultForCrp2(actionState, cardConfig!!, bean, pointList)
             }
-
             CaseBean.TYPE_SF -> {
                 return AppCardUtils.genResultForSfCrp2(actionState, cardConfig!!, bean, pointList)
             }
-
             CaseBean.TYPE_3LJ -> {
                 return AppCardUtils.genResultFor3LJ(actionState, cardConfig!!, bean, pointList)
             }
-
             CaseBean.TYPE_2LJ_A -> {
                 return AppCardUtils.genResultFor2LJA(actionState, cardConfig!!, bean, pointList)
             }
-
             CaseBean.TYPE_2LJ_B -> {
                 return AppCardUtils.genResultFor2LJB(actionState, cardConfig!!, bean, pointList)
             }
-
             CaseBean.TYPE_2LJ_B_M -> {
                 return AppCardUtils.genResultFor2LJBM(actionState, cardConfig!!, bean, pointList)
             }
-
             CaseBean.TYPE_2LJ_B_F -> {
                 return AppCardUtils.genResultFor2LJBF(actionState, cardConfig!!, bean, pointList)
             }
-
             CaseBean.TYPE_3LJ_BIOAGE_L1 -> {
                 return AppCardUtils.genResultFor3LJBAL1(actionState, cardConfig!!, bean, pointList)
             }
-
             CaseBean.TYPE_BIOAGE_CRP -> {
                 return AppCardUtils.genResultForBACRP(actionState, cardConfig!!, bean, pointList)
             }
-
             else -> {
                 return ""
             }
@@ -2058,17 +2202,18 @@ class WorkMainViewModel : ViewModel() {
         onClearInteraction()
 
         viewModelScope.launch {
-            val cancelResult = withContext(Dispatchers.IO) {
-                CtlCommandsV2.readAllData(CtlCommandsV2.cancel())
-            }
+            val cancelResult =
+                    withContext(Dispatchers.IO) {
+                        CtlCommandsV2.readAllData(CtlCommandsV2.cancel())
+                    }
             Timber.w("cancelResult: $cancelResult")
 
-//        // 获取当前用户角色
-//        if (AppParams.curUser.role != User.ROLE_CHECKER) {
+            //        // 获取当前用户角色
+            //        if (AppParams.curUser.role != User.ROLE_CHECKER) {
             updateAction(ACTION_REPORT1)
-//        } else {
-//            onActionReportGen()
-//        }
+            //        } else {
+            //            onActionReportGen()
+            //        }
         }
     }
 
@@ -2079,25 +2224,27 @@ class WorkMainViewModel : ViewModel() {
 
     fun onActionContinueConfirm() {
         viewModelScope.launch {
-            if (sysConfig.value.scan == "y" || sysConfig.value.scan.isEmpty()
-                || AppParams.curUser.role != User.ROLE_DEV
+            if (sysConfig.value.scan == "y" ||
+                            sysConfig.value.scan.isEmpty() ||
+                            AppParams.curUser.role != User.ROLE_DEV
             ) {
                 // 判断卡片是否插到位
-                val gpioReadResult = withContext(Dispatchers.IO) {
-                    CtlCommandsV2.readAllData(CtlCommandsV2.gpioRead())
-                }
+                val gpioReadResult =
+                        withContext(Dispatchers.IO) {
+                            CtlCommandsV2.readAllData(CtlCommandsV2.gpioRead())
+                        }
                 Timber.d("gpioReadResult: $gpioReadResult")
 
-                val hasCard = withContext(Dispatchers.IO) {
-                    CtlCommandsV2.gpioReadHasCard(gpioReadResult)
-                }
+                val hasCard =
+                        withContext(Dispatchers.IO) {
+                            CtlCommandsV2.gpioReadHasCard(gpioReadResult)
+                        }
                 if (!hasCard) {
                     actionState.value =
-                        ActionState(
-                            EVT_DEV_ERROR,
-                            App.getContext()
-                                .getString(R.string.work_case_put_chip_tip)
-                        )
+                            ActionState(
+                                    EVT_DEV_ERROR,
+                                    App.getContext().getString(R.string.work_case_put_chip_tip)
+                            )
                     return@launch
                 }
             }
@@ -2131,14 +2278,15 @@ class WorkMainViewModel : ViewModel() {
         CtlCommandsV2.isWaitScanStatusSuccessCancel = true
 
         actionState.value =
-            ActionState(EVT_LOADING, App.getContext().getString(R.string.work_report_exit))
+                ActionState(EVT_LOADING, App.getContext().getString(R.string.work_report_exit))
 
         viewModelScope.launch {
             cancelJobs()
 
-            val cancelResult = withContext(Dispatchers.IO) {
-                CtlCommandsV2.readAllData(CtlCommandsV2.cancel())
-            }
+            val cancelResult =
+                    withContext(Dispatchers.IO) {
+                        CtlCommandsV2.readAllData(CtlCommandsV2.cancel())
+                    }
             Timber.w("cancelResult: $cancelResult")
 
             actionState.value = ActionState(EVT_CHIP_TO_REMOVE)
@@ -2174,7 +2322,7 @@ class WorkMainViewModel : ViewModel() {
         CtlCommandsV2.isWaitAbsorbStatusSuccessCancel = true
 
         actionState.value =
-            ActionState(EVT_LOADING, App.getContext().getString(R.string.work_ing_reset))
+                ActionState(EVT_LOADING, App.getContext().getString(R.string.work_ing_reset))
 
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
@@ -2183,8 +2331,10 @@ class WorkMainViewModel : ViewModel() {
                 val cancelResult = CtlCommandsV2.readAllData(CtlCommandsV2.cancel())
                 Timber.w("cancelResult: $cancelResult")
 
-                if ((cardConfig != null && cardConfig!!.ft0 >= 1 && action.value == ACTION_WORK_WAIT) ||
-                    action.value == ACTION_WORK_PROCESS
+                if ((cardConfig != null &&
+                                cardConfig!!.ft0 >= 1 &&
+                                action.value == ACTION_WORK_WAIT) ||
+                                action.value == ACTION_WORK_PROCESS
                 ) {
                     val homingResult = CtlCommandsV2.readAllData(CtlCommandsV2.homing())
                     Timber.w("homingResult: $homingResult")
@@ -2192,14 +2342,14 @@ class WorkMainViewModel : ViewModel() {
                     onActionWorkOutDoneHomingSuccess(callback)
                 } else {
                     val moveToSsResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
+                            CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
                     Timber.w("moveToSsResult: $moveToSsResult")
 
                     // 等待成功
                     CtlCommandsV2.waitMoveToSsStatusSuccess()
 
                     val moveDurationResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, 88888, 900))
+                            CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, 88888, 900))
                     Timber.w("moveDurationResult: $moveDurationResult")
 
                     // 等待成功
@@ -2217,8 +2367,9 @@ class WorkMainViewModel : ViewModel() {
         // 根据反馈更新数据
         val message = event.message
         if (message.cmd == CtlConstantsV2.CMD_ACTION_QUERY_DATA) {
-//            val testSid = message.paramData.getParameter(CtlConstantsV2.PARAM_TEST_SID)
-//            Timber.d(testSid)
+            //            val testSid =
+            // message.paramData.getParameter(CtlConstantsV2.PARAM_TEST_SID)
+            //            Timber.d(testSid)
             AppParams.testCount += 1
         }
     }
@@ -2229,29 +2380,29 @@ class WorkMainViewModel : ViewModel() {
 
     fun onActionReportGen() {
         actionState.value =
-            ActionState(
-                EVT_LOADING,
-                App.getContext().getString(R.string.work_report_gen)
-            )
+                ActionState(EVT_LOADING, App.getContext().getString(R.string.work_report_gen))
         viewModelScope.launch {
             val bean = bean.value
             val entity: Case = saveCase(bean)
             val context = App.getContext()
             val resultList: ArrayList<CaseResult> =
-                Json.decodeFromString(bean.workResult) as ArrayList<CaseResult>
+                    Json.decodeFromString(bean.workResult) as ArrayList<CaseResult>
             for (caseResult in resultList) {
                 if (caseResult.result.isEmpty()) {
-                    actionState.value = ActionState(
-                        EVT_DEV_ERROR,
-                        App.getContext().getString(R.string.work_report_result) + App.getContext()
-                            .getString(R.string.work_config_check_null)
-                    )
+                    actionState.value =
+                            ActionState(
+                                    EVT_DEV_ERROR,
+                                    App.getContext().getString(R.string.work_report_result) +
+                                            App.getContext()
+                                                    .getString(R.string.work_config_check_null)
+                            )
                     return@launch
                 }
             }
-            val configRepostBean = withContext(Dispatchers.IO) {
-                SysConfigService.findBean(ConfigReportBean.PREFIX, ConfigReportBean::class)
-            }
+            val configRepostBean =
+                    withContext(Dispatchers.IO) {
+                        SysConfigService.findBean(ConfigReportBean.PREFIX, ConfigReportBean::class)
+                    }
             val title = configRepostBean.hosName
             var subTitle = "report"
             if (bean.type == CaseBean.TYPE_CRP) {
@@ -2281,36 +2432,45 @@ class WorkMainViewModel : ViewModel() {
                     }
                 }
                 AppPdfUtils.generatePdf(
-                    PdfBean(
-                        title = title,
-                        subTitle = subTitle,
-                        logo = logo,
-                        outPath = bean.pdfPath,
-                        jcbh = entity.caseId,
-                        type = bean.type,
-                        jcrq = AppLocalDateUtils.formatDate(entity.time.toLocalDate()),
-                        xm = entity.name,
-                        xb = AppDictUtils.label(AppDictUtils.genderOptions(context), entity.gender),
-                        nl = AppLocalDateUtils.calcAge(entity.birthday, entity.time.toLocalDate())
-                            .toString(),
-                        sjId = entity.reagentId,
-                        ybId = entity.caseId,
-                        data = (resultList).map { result ->
-                            listOf(
-                                result.name,
-                                result.radioValue,
-                                result.result,
-                                result.refer,
-                                result.flag.toString(),
-                                result.t1Value,
-                                result.t2Value,
-                                result.t3Value,
-                                result.t4Value,
-                                result.cValue,
-                                result.c2Value
-                            )
-                        }
-                    )
+                        PdfBean(
+                                title = title,
+                                subTitle = subTitle,
+                                logo = logo,
+                                outPath = bean.pdfPath,
+                                jcbh = entity.caseId,
+                                type = bean.type,
+                                jcrq = AppLocalDateUtils.formatDate(entity.time.toLocalDate()),
+                                xm = entity.name,
+                                xb =
+                                        AppDictUtils.label(
+                                                AppDictUtils.genderOptions(context),
+                                                entity.gender
+                                        ),
+                                nl =
+                                        AppLocalDateUtils.calcAge(
+                                                        entity.birthday,
+                                                        entity.time.toLocalDate()
+                                                )
+                                                .toString(),
+                                sjId = entity.reagentId,
+                                ybId = entity.caseId,
+                                data =
+                                        (resultList).map { result ->
+                                            listOf(
+                                                    result.name,
+                                                    result.radioValue,
+                                                    result.result,
+                                                    result.refer,
+                                                    result.flag.toString(),
+                                                    result.t1Value,
+                                                    result.t2Value,
+                                                    result.t3Value,
+                                                    result.t4Value,
+                                                    result.cValue,
+                                                    result.c2Value
+                                            )
+                                        }
+                        )
                 )
             }
 
@@ -2321,21 +2481,22 @@ class WorkMainViewModel : ViewModel() {
 
     fun onActionReportGet() {
         actionState.value =
-            ActionState(EVT_LOADING, App.getContext().getString(R.string.work_config_view_qr))
+                ActionState(EVT_LOADING, App.getContext().getString(R.string.work_config_view_qr))
 
         // 获取报告二维码
         viewModelScope.launch {
-            val content = withContext(Dispatchers.IO) {
-                FrosApi.getReportUrl(bean.value.qrCode)
+            val content =
+                    withContext(Dispatchers.IO) {
+                        FrosApi.getReportUrl(bean.value.qrCode)
 
-//                val case = bean.value
-//                val result = case.resultList[0]
-//                FrosApi.getReportUrlV2(
-//                    case.name,
-//                    result.refer, result.result,
-//                    result.t4Value, result.t3Value
-//                )
-            }
+                        //                val case = bean.value
+                        //                val result = case.resultList[0]
+                        //                FrosApi.getReportUrlV2(
+                        //                    case.name,
+                        //                    result.refer, result.result,
+                        //                    result.t4Value, result.t3Value
+                        //                )
+                    }
 
             Timber.w("onActionReportGet: $content")
             viewState.value = ViewState.LoadSuccess()
@@ -2358,16 +2519,16 @@ class WorkMainViewModel : ViewModel() {
     }
 
     fun onActionReportPre() {
-//        viewModelScope.launch(Dispatchers.IO) {
-//            updateAction(workFlowAction(0).action)
-//        }
+        //        viewModelScope.launch(Dispatchers.IO) {
+        //            updateAction(workFlowAction(0).action)
+        //        }
         updateAction(ACTION_REPORT1)
     }
 
     fun onActionReportContinue() {
         onReset()
         // TODO 简化信息
-//        updateAction(ACTION_START)
+        //        updateAction(ACTION_START)
         updateAction(ACTION_CASE_CHIP)
         onClearInteraction()
     }
@@ -2382,17 +2543,15 @@ class WorkMainViewModel : ViewModel() {
     }
 
     fun onActionReportPrint(pdfPath: String) {
-//        if (!AppParams.wlanEnabled) {
-//            actionState.value = ActionState(
-//                ReportPDFViewModel.EVT_REPORT_ERROR,
-//                App.getContext().getString(R.string.wlan_not_connect)
-//            )
-//            return
-//        }
+        //        if (!AppParams.wlanEnabled) {
+        //            actionState.value = ActionState(
+        //                ReportPDFViewModel.EVT_REPORT_ERROR,
+        //                App.getContext().getString(R.string.wlan_not_connect)
+        //            )
+        //            return
+        //        }
         onClearInteraction()
-        viewModelScope.launch(Dispatchers.IO) {
-            EventUtils.publishEvent(AppPdfPrintEvent(pdfPath))
-        }
+        viewModelScope.launch(Dispatchers.IO) { EventUtils.publishEvent(AppPdfPrintEvent(pdfPath)) }
     }
 
     // 更新操作
@@ -2414,9 +2573,7 @@ class WorkMainViewModel : ViewModel() {
     private fun onLoadHomingSuccessCustomFunction(progressVal: Int) {
         viewModelScope.launch {
             if (progressVal < CtlConstantsV2.CMD_ACTION_HOMING_STATUS_COMPLETED) {
-                withContext(Dispatchers.IO) {
-                    onLoadHomingSuccess()
-                }
+                withContext(Dispatchers.IO) { onLoadHomingSuccess() }
             } else {
                 Timber.d("onLoadHomingSuccessCustomFunction done")
                 viewState.value = ViewState.LoadSuccess()
@@ -2431,9 +2588,7 @@ class WorkMainViewModel : ViewModel() {
     private fun onActionStartNextHomingSuccessCustomFunction(progressVal: Int) {
         viewModelScope.launch {
             if (progressVal < CtlConstantsV2.CMD_ACTION_HOMING_STATUS_COMPLETED) {
-                withContext(Dispatchers.IO) {
-                    onActionStartNextHomingSuccess()
-                }
+                withContext(Dispatchers.IO) { onActionStartNextHomingSuccess() }
             } else {
                 Timber.d("onActionStartNextHomingSuccessCustomFunction done")
                 updateAction(ACTION_CASE_CHIP)
@@ -2449,9 +2604,7 @@ class WorkMainViewModel : ViewModel() {
     private fun onActionCaseInputNextHomingSuccessCustomFunction(progressVal: Int) {
         viewModelScope.launch {
             if (progressVal < CtlConstantsV2.CMD_ACTION_HOMING_STATUS_COMPLETED) {
-                withContext(Dispatchers.IO) {
-                    onActionCaseInputNextHomingSuccess()
-                }
+                withContext(Dispatchers.IO) { onActionCaseInputNextHomingSuccess() }
             } else {
                 Timber.d("doMoveOut for chip done")
                 updateAction(ACTION_CASE_CHIP)
@@ -2462,33 +2615,28 @@ class WorkMainViewModel : ViewModel() {
 
     private fun onActionWorkOutDoneHomingSuccess(callback: () -> Unit) {
         CtlCommandsV2.processHomingStatus {
-            onActionWorkOutDoneHomingSuccessCustomFunction(
-                it,
-                callback
-            )
+            onActionWorkOutDoneHomingSuccessCustomFunction(it, callback)
         }
     }
 
     private fun onActionWorkOutDoneHomingSuccessCustomFunction(
-        progressVal: Int,
-        callback: () -> Unit
+            progressVal: Int,
+            callback: () -> Unit
     ) {
         viewModelScope.launch {
             if (progressVal < CtlConstantsV2.CMD_ACTION_HOMING_STATUS_COMPLETED) {
-                withContext(Dispatchers.IO) {
-                    onActionWorkOutDoneHomingSuccess(callback)
-                }
+                withContext(Dispatchers.IO) { onActionWorkOutDoneHomingSuccess(callback) }
             } else {
                 withContext(Dispatchers.IO) {
                     val moveToSsResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
+                            CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
                     Timber.w("moveToSsResult: $moveToSsResult")
 
                     // 等待成功
                     CtlCommandsV2.waitMoveToSsStatusSuccess()
 
                     val moveDurationResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, 88888, 900))
+                            CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, 88888, 900))
                     Timber.w("moveDurationResult: $moveDurationResult")
 
                     // 等待成功

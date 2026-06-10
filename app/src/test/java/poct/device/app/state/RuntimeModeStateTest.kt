@@ -73,6 +73,26 @@ class RuntimeModeStateTest {
     }
 
     @Test
+    fun testModeAndVenueModeAreMutuallyExclusive() {
+        val state = RuntimeModeState(nowMillis = { currentTime })
+
+        assertFalse(state.testModeEnabled.value)
+        assertFalse(state.venueModeEnabled.value)
+
+        state.setVenueModeEnabled(true)
+        assertTrue(state.venueModeEnabled.value)
+        assertFalse(state.testModeEnabled.value)
+
+        state.setTestModeEnabled(true)
+        assertTrue(state.testModeEnabled.value)
+        assertFalse(state.venueModeEnabled.value)
+
+        state.setVenueModeEnabled(true)
+        assertTrue(state.venueModeEnabled.value)
+        assertFalse(state.testModeEnabled.value)
+    }
+
+    @Test
     fun nanoEnvironmentDefaultsToProductionAndCyclesInMemory() {
         val state = RuntimeModeState(nowMillis = { currentTime })
 

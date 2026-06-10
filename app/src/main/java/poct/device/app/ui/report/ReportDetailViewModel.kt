@@ -389,7 +389,7 @@ class ReportDetailViewModel : ViewModel() {
             }
         }
         if (curBean.type == CaseBean.TYPE_3LJ_BIOAGE_L1) {
-            val result = curBean.resultList[0]
+            val result = curBean.resultList.firstOrNull() ?: return newPointList
             labelList.add("")
             labelList.add(result.t1ValueName)
             labelList.add("")
@@ -429,7 +429,7 @@ class ReportDetailViewModel : ViewModel() {
             newPointList.add(CasePoint(0.0, 0.0))
         }
         if (curBean.type == CaseBean.TYPE_BIOAGE_CRP) {
-            val result = curBean.resultList[0]
+            val result = curBean.resultList.firstOrNull() ?: return newPointList
             labelList.add("")
             labelList.add(result.t1ValueName)
             labelList.add("")

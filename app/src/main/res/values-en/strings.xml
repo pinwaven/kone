@@ -447,6 +447,13 @@
     <string name="factory_test">Factory test</string>
     <string name="factory_test_password_content">Factory test password is required</string>
     <string name="venue_mode">Venue mode</string>
+    <string name="test_mode">Test mode</string>
+    <string name="test_mode_reaction_time">Reaction time</string>
+    <string name="test_mode_reaction_time_unit">seconds</string>
+    <string name="test_mode_absorb_time">Absorb time</string>
+    <string name="test_mode_scan_time">Scan time</string>
+    <string name="test_mode_laser_power">Laser power</string>
+    <string name="test_mode_millisecond_unit">ms</string>
     <string name="after_sale_sun_upgrade">Remote Control</string>
     <string name="after_sale_version_upgrade">Upgrade</string>
     <string name="after_sale_version_history">History</string>

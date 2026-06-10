@@ -82,8 +82,16 @@ fun WorkMain(navController: NavController, viewModel: WorkMainViewModel = viewMo
     val sysConfig = viewModel.sysConfig.collectAsState()
     val venueModeEnabled = AppParams.runtimeModeState.venueModeEnabled.collectAsState()
     val skipCurrentCutOff2Wait = viewModel.skipCurrentCutOff2Wait.collectAsState()
+    val navigateReportDetail = viewModel.navigateReportDetail.collectAsState()
 
     val curCardConfig = viewModel.curCardConfig.collectAsState()
+    LaunchedEffect(navigateReportDetail.value) {
+        if (navigateReportDetail.value) {
+            viewModel.consumeReportDetailNavigation()
+            navController.navigate(RouteConfig.REPORT_TEST_MODE_POINT_CHART)
+        }
+    }
+
     LaunchedEffect(viewState) {
         if (viewState.value == ViewState.Default) {
             viewModel.onLoad()

@@ -24,10 +24,13 @@ import com.patrykandpatrick.vico.core.component.shape.cornered.MarkerCorneredSha
 import com.patrykandpatrick.vico.core.context.MeasureContext
 import com.patrykandpatrick.vico.core.extension.copyColor
 import com.patrykandpatrick.vico.core.marker.Marker
+import com.patrykandpatrick.vico.core.marker.MarkerLabelFormatter
 
 @Composable
 fun rememberMarker(
     indicatorFlag: Boolean = true,
+    labelFormatter: MarkerLabelFormatter? = null,
+    labelLineCount: Int = LABEL_LINE_COUNT,
 ): Marker {
     val labelBackgroundColor = MaterialTheme.colorScheme.surface
     val labelBackground = remember(labelBackgroundColor) {
@@ -39,7 +42,7 @@ fun rememberMarker(
     }
     val label = textComponent(
         background = labelBackground,
-        lineCount = LABEL_LINE_COUNT,
+        lineCount = labelLineCount,
         padding = labelPadding,
         typeface = Typeface.MONOSPACE,
     )
@@ -67,6 +70,9 @@ fun rememberMarker(
         object : MarkerComponent(label, indicator, guideline) {
             init {
                 indicatorSizeDp = INDICATOR_SIZE_DP
+                if (labelFormatter != null) {
+                    this.labelFormatter = labelFormatter
+                }
                 onApplyEntryColor = { entryColor ->
                     indicatorOuterComponent.color = entryColor.copyColor(
                         INDICATOR_OUTER_COMPONENT_ALPHA

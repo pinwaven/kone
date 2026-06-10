@@ -6,6 +6,7 @@ class RuntimeModeState(
     private val nowMillis: () -> Long = { System.currentTimeMillis() }
 ) {
     val venueModeEnabled = MutableStateFlow(false)
+    val testModeEnabled = MutableStateFlow(false)
     val nanoEnvironment = MutableStateFlow(NanoEnvironment.PRODUCTION)
 
     private var factoryTestUnlockedAtMillis: Long? = null
@@ -27,9 +28,19 @@ class RuntimeModeState(
 
     fun setVenueModeEnabled(enabled: Boolean) {
         venueModeEnabled.value = enabled
+        if (enabled) {
+            testModeEnabled.value = false
+        }
         if (!enabled) {
             homeVenueDetectionWaitCompleted = false
             venueContinueCutOffWaitSkipRequested = false
+        }
+    }
+
+    fun setTestModeEnabled(enabled: Boolean) {
+        testModeEnabled.value = enabled
+        if (enabled) {
+            setVenueModeEnabled(false)
         }
     }
 

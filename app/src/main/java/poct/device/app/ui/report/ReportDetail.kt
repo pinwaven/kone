@@ -151,7 +151,13 @@ fun ReportDetail(navController: NavController, viewModel: ReportDetailViewModel 
                 } else {
                     val marker = rememberMarker(indicatorFlag = false)
                     val bottomAxisValueFormatter =
-                        AxisValueFormatter<AxisPosition.Horizontal.Bottom> { x, _ -> labelList[x.toInt() % labelList.size] }
+                        AxisValueFormatter<AxisPosition.Horizontal.Bottom> { x, _ ->
+                            if (labelList.isEmpty()) {
+                                ""
+                            } else {
+                                labelList[x.toInt() % labelList.size]
+                            }
+                        }
                     var wide = 4f
                     var markerMap = mapOf(
                         1f to marker,

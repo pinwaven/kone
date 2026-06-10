@@ -56,3 +56,49 @@ This document records the confirmed requirements for replacing the existing temp
 8. Venue mode affects only the homepage detection entry.
 9. In venue mode, only the first homepage detection after enabling venue mode waits; subsequent homepage detections skip the wait.
 10. Turning venue mode off and on again resets the first-detection wait behavior.
+
+## Requirement 6: Test Mode in Temporary Operation
+
+1. Add a "测试模式" switch to the "临时操作" page.
+2. "测试模式" and "会场模式" are mutually exclusive.
+3. Turning on "测试模式" should turn off "会场模式".
+4. Turning on "会场模式" should turn off "测试模式".
+5. When "测试模式" is turned on, automatically show a numeric input dialog for configuring "反应时间".
+6. "反应时间" is configured in seconds.
+7. The default "反应时间" is `300` seconds.
+8. "吸水时间" is configured in milliseconds, valid range `1500` to `100000`, default `3000`.
+9. "扫描时间" is configured in milliseconds, valid range `1` to `60000`, default `8000`.
+10. "激光强度" has no unit, valid range `-100` to `0`, default `-25`.
+11. The "测试模式" configuration must be stored in the local database.
+12. When "测试模式" is enabled, the homepage detection button image changes to `test_mode_btn.png`.
+13. `test_mode_btn.png` is already available in the app resource folders.
+14. In "测试模式", the detection flow skips QR code validation.
+15. In "测试模式", the detection flow skips reagent card binding validation.
+16. In "测试模式", the detection flow still fetches detection configuration from the server.
+17. In "测试模式", after downloading the server configuration, directly override `xt1` with the local absorb time, `cut_off1` with the local laser strength, and `cut_off2` with the local reaction time.
+18. In "测试模式", subsequent absorb, laser, and reaction logic must read the overridden card configuration instead of applying test-mode overrides at each use site.
+19. In "测试模式", after reaction and scan finish, do not call `postKinoResult` or `postBiomarkers`.
+20. In "测试模式", set the result type to `TYPE_BIOAGE_CRP` before generating local result data.
+21. In "测试模式", the final result should navigate directly to `RouteConfig.REPORT_DETAIL` to show the chart.
+22. When "测试模式" is enabled, show the configured test mode parameters as text below the "测试模式" switch.
+23. When "测试模式" is disabled, hide the test mode parameter text.
+
+## Test Mode Acceptance Criteria
+
+1. The "临时操作" page contains both "会场模式" and "测试模式".
+2. Only one of "会场模式" and "测试模式" can be enabled at the same time.
+3. Enabling "测试模式" opens a seconds-based numeric input dialog for "反应时间".
+4. If the user does not change the value, "反应时间" defaults to `300` seconds.
+5. The configured test mode parameters persist in the local database.
+6. With "测试模式" enabled, the homepage button uses `test_mode_btn.png`.
+7. With "测试模式" enabled, QR code validation is skipped.
+8. With "测试模式" enabled, reagent card binding validation is skipped.
+9. With "测试模式" enabled, server-side detection configuration fetching still runs.
+10. With "测试模式" enabled, the local database absorb time overrides the server-fetched `xt1` value.
+11. With "测试模式" enabled, the local database laser strength overrides the server-fetched `cut_off1` value.
+12. With "测试模式" enabled, the local database reaction time overrides the server-fetched `cut_off2` value.
+13. With "测试模式" enabled, the scan result does not upload to Nano `postKinoResult` or `postBiomarkers`.
+14. With "测试模式" enabled, the local result type is `TYPE_BIOAGE_CRP`.
+15. With "测试模式" enabled, the final result navigates directly to `RouteConfig.REPORT_DETAIL`.
+16. With "测试模式" enabled, the page shows the configured test mode parameters below the "测试模式" switch.
+17. With "测试模式" disabled, the test mode parameter text is not shown.

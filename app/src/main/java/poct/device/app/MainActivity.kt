@@ -64,6 +64,7 @@ import poct.device.app.ui.report.ReportDetail
 import poct.device.app.ui.report.ReportEdit
 import poct.device.app.ui.report.ReportMain
 import poct.device.app.ui.report.ReportPDF
+import poct.device.app.ui.report.TestModePointChart
 import poct.device.app.ui.sample.SampleSerial
 import poct.device.app.ui.setting.SettingMain
 import poct.device.app.ui.setting.TemporaryOperation
@@ -613,6 +614,7 @@ fun NavGraphBuilder.reportNav(navController: NavController) {
         composable(RouteConfig.REPORT_MAIN) { ReportMain(navController = navController) }
         composable(RouteConfig.REPORT_PDF) { ReportPDF(navController = navController) }
         composable(RouteConfig.REPORT_DETAIL) { ReportDetail(navController = navController) }
+        composable(RouteConfig.REPORT_TEST_MODE_POINT_CHART) { TestModePointChart(navController = navController) }
         composable(RouteConfig.REPORT_EDIT) { ReportEdit(navController = navController) }
     }
 }
@@ -661,6 +663,5 @@ fun NavGraphBuilder.sysConfigNav(navController: NavController) {
         composable(RouteConfig.SYS_CONFIG_SCANNER_LIST) { SysConfigScannerList(navController = navController) }
     }
 }
-
 
 

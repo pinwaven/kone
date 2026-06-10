@@ -22,6 +22,7 @@ object RouteConfig {
     const val REPORT_MAIN = "$REPORT/main"
     const val REPORT_PDF = "$REPORT/pdf"
     const val REPORT_DETAIL = "$REPORT/detail"
+    const val REPORT_TEST_MODE_POINT_CHART = "$REPORT/testModePointChart"
     const val REPORT_EDIT = "$REPORT/edit"
 
     const val AFTER_SALE = "afterSale"

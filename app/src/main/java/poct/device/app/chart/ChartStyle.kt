@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
+import com.patrykandpatrick.vico.compose.component.shapeComponent
 import com.patrykandpatrick.vico.compose.component.shape.shader.fromBrush
 import com.patrykandpatrick.vico.compose.style.ChartStyle
 import com.patrykandpatrick.vico.core.DefaultAlpha
@@ -76,3 +77,61 @@ fun rememberChartStyle(columnChartColors: List<Color>, lineChartColors: List<Col
 @Composable
 fun rememberChartStyle(chartColors: List<Color>, wide: Float) =
     rememberChartStyle(columnChartColors = chartColors, lineChartColors = chartColors, wide)
+
+@Composable
+fun rememberTestModePointChartStyle(
+    lineChartColors: List<Color>,
+    pointSeriesStartIndex: Int,
+    wide: Float,
+): ChartStyle {
+    val isSystemInDarkTheme = isSystemInDarkTheme()
+    val pointComponents =
+        lineChartColors.map { color ->
+            shapeComponent(Shapes.pillShape, color)
+        }
+    return remember(lineChartColors, pointSeriesStartIndex, wide, isSystemInDarkTheme, pointComponents) {
+        val defaultColors = if (isSystemInDarkTheme) DefaultColors.Dark else DefaultColors.Light
+        ChartStyle(
+            ChartStyle.Axis(
+                axisLabelColor = Color(defaultColors.axisLabelColor),
+                axisGuidelineColor = Color(defaultColors.axisGuidelineColor),
+                axisLineColor = Color(defaultColors.axisLineColor),
+            ),
+            ChartStyle.ColumnChart(
+                lineChartColors.map { columnChartColor ->
+                    LineComponent(
+                        color = columnChartColor.toArgb(),
+                        thicknessDp = wide,
+                        shape = Shapes.roundedCornerShape(20),
+                    )
+                },
+            ),
+            ChartStyle.LineChart(
+                lineChartColors.mapIndexed { index, lineChartColor ->
+                    val isPointSeries = index >= pointSeriesStartIndex
+                    LineChart.LineSpec(
+                        lineColor = lineChartColor.toArgb(),
+                        lineThicknessDp = if (isPointSeries) 0f else wide,
+                        lineBackgroundShader =
+                            if (isPointSeries) {
+                                null
+                            } else {
+                                DynamicShaders.fromBrush(
+                                    Brush.verticalGradient(
+                                        listOf(
+                                            lineChartColor.copy(DefaultAlpha.LINE_BACKGROUND_SHADER_START),
+                                            lineChartColor.copy(DefaultAlpha.LINE_BACKGROUND_SHADER_END),
+                                        ),
+                                    ),
+                                )
+                            },
+                        point = if (isPointSeries) pointComponents[index] else null,
+                        pointSizeDp = if (isPointSeries) 12f else 0f,
+                    )
+                },
+            ),
+            ChartStyle.Marker(indicatorSize = 16.dp),
+            Color(defaultColors.elevationOverlayColor),
+        )
+    }
+}
