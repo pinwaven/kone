@@ -40,8 +40,8 @@ class TestModePointChartViewModel : ViewModel() {
         viewState.value = ViewState.LoadingOver(App.getContext().getString(R.string.work_ing_reset))
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                CtlCommandsV2.isWaitScanStatusSuccessCancel = true
-                CtlCommandsV2.isWaitAbsorbStatusSuccessCancel = true
+                // CtlCommandsV2.isWaitScanStatusSuccessCancel = true
+                // CtlCommandsV2.isWaitAbsorbStatusSuccessCancel = true
 
                 val cancelResult = CtlCommandsV2.readAllData(CtlCommandsV2.cancel())
                 Timber.w("testMode chart home cancelResult: $cancelResult")
