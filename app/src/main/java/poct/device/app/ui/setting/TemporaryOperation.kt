@@ -225,11 +225,36 @@ fun TemporaryOperation(navController: NavController) {
                 TestModeConfigField.LASER_POWER,
                 null -> ""
             }
+            val editingRangeText = when (editingField) {
+                TestModeConfigField.ABSORB_TIME -> stringResource(
+                    id = R.string.test_mode_value_range_with_unit,
+                    "0",
+                    "300000",
+                    stringResource(id = R.string.test_mode_millisecond_unit)
+                )
+
+                TestModeConfigField.SCAN_TIME -> stringResource(
+                    id = R.string.test_mode_value_range_with_unit,
+                    "1",
+                    "300000",
+                    stringResource(id = R.string.test_mode_millisecond_unit)
+                )
+
+                TestModeConfigField.LASER_POWER -> stringResource(
+                    id = R.string.test_mode_value_range,
+                    "-100",
+                    "0"
+                )
+
+                TestModeConfigField.REACTION_TIME,
+                null -> ""
+            }
             TestModeNumberDialog(
                 visible = editingField != null,
                 title = editingTitle,
                 value = editingValue,
                 unit = editingUnit,
+                rangeText = editingRangeText,
                 signed = editingField == TestModeConfigField.LASER_POWER,
                 autoShowKeyboard = autoShowKeyboard,
                 onValueChange = { value ->
@@ -313,6 +338,7 @@ private fun TestModeNumberDialog(
     title: String,
     value: String,
     unit: String,
+    rangeText: String,
     signed: Boolean,
     autoShowKeyboard: Boolean,
     onValueChange: (String) -> Unit,
@@ -344,7 +370,7 @@ private fun TestModeNumberDialog(
         Surface(
             modifier = Modifier
                 .width(300.dp)
-                .height(210.dp),
+                .height(if (rangeText.isEmpty()) 210.dp else 236.dp),
             shape = RoundedCornerShape(8.dp)
         ) {
             Column(
@@ -368,6 +394,15 @@ private fun TestModeNumberDialog(
                     color = fontColor,
                     text = title
                 )
+                if (rangeText.isNotEmpty()) {
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        fontSize = 13.sp,
+                        color = fontColor,
+                        text = rangeText
+                    )
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

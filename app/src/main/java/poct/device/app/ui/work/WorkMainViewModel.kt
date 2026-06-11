@@ -1317,16 +1317,19 @@ class WorkMainViewModel : ViewModel() {
                         action = ACTION_WORK_PROCESS
                 )
         )
-        // 打开吸水阀
-        list.add(
-                WorkFlowActionV2(
-                        type = WorkFlowActionV2.TYPE_SERIAL,
-                        cmd = CtlCommandsV2.absorb(cardConfig!!.xt1 * 1000),
-                        time = -2,
-                        step = STEP_WORK,
-                        action = ACTION_WORK_PROCESS
-                )
-        )
+        if (cardConfig!!.xt1 > 0) {
+            // 如果不需要吸水，不要做动作
+            // 打开吸水阀
+            list.add(
+                    WorkFlowActionV2(
+                            type = WorkFlowActionV2.TYPE_SERIAL,
+                            cmd = CtlCommandsV2.absorb(cardConfig!!.xt1 * 1000),
+                            time = -2,
+                            step = STEP_WORK,
+                            action = ACTION_WORK_PROCESS
+                    )
+            )
+        }
         // 扫描检测
         list.add(
                 WorkFlowActionV2(
@@ -1414,16 +1417,19 @@ class WorkMainViewModel : ViewModel() {
                         action = ACTION_WORK_PROCESS
                 )
         )
-        // 打开吸水阀
-        list.add(
-                WorkFlowActionV2(
-                        type = WorkFlowActionV2.TYPE_SERIAL,
-                        cmd = CtlCommandsV2.absorb(cardConfig!!.xt1 * 1000),
-                        time = -2,
-                        step = STEP_WORK,
-                        action = ACTION_WORK_PROCESS
-                )
-        )
+        if (cardConfig!!.xt1 > 0) {
+            // 如果不需要吸水，不要做动作
+            // 打开吸水阀
+            list.add(
+                    WorkFlowActionV2(
+                            type = WorkFlowActionV2.TYPE_SERIAL,
+                            cmd = CtlCommandsV2.absorb(cardConfig!!.xt1 * 1000),
+                            time = -2,
+                            step = STEP_WORK,
+                            action = ACTION_WORK_PROCESS
+                    )
+            )
+        }
         // 扫描检测
         list.add(
                 WorkFlowActionV2(
@@ -1584,7 +1590,10 @@ class WorkMainViewModel : ViewModel() {
                         reagentId = cardBatchCode,
                         type = cardInfo.cardBatch.type,
                         qrCode = testModeCardCode,
-                        caseId = cardInfo.card.id.ifEmpty { AppTypeUtils.findCardId(testModeCardCode) },
+                        caseId =
+                                cardInfo.card.id.ifEmpty {
+                                    AppTypeUtils.findCardId(testModeCardCode)
+                                },
                         cardInfo = cardInfo,
                 )
         )
