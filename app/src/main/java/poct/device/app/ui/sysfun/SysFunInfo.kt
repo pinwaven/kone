@@ -277,7 +277,12 @@ fun SysFunInfoBody(
             Spacer(modifier = Modifier.height(12.dp))
             AppFilledButton(
                 modifier = Modifier.fillMaxWidth(),
-                onClick = { navController.navigate(RouteConfig.AFTER_SALE_VERSION_UPGRADE) },
+                onClick = {
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set(SYS_FUN_API_TEST_OPEN_UPGRADE_TAB_KEY, true)
+                    navController.navigate(RouteConfig.SYS_FUN_API_TEST)
+                },
                 text = stringResource(id = R.string.after_sale_version_upgrade)
             )
             AppDivider()

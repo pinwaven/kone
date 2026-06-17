@@ -139,7 +139,7 @@ fun WorkMain(navController: NavController, viewModel: WorkMainViewModel = viewMo
                     onHome = {
                         handleHomeClick()
                     },
-                    trailingContent = if (sysConfig.value.flow == "nano") ({
+                    trailingContent = if (ConfigSysBean.isNanoFlow(sysConfig.value.flow)) ({
                         Text(
                             text = "NANO",
                             fontSize = 11.sp,
@@ -451,7 +451,7 @@ fun WorkMainBody(
             )
 
             WorkMainViewModel.ACTION_REPORT1 -> {
-                if (sysConfig.value.flow == "nano") {
+                if (ConfigSysBean.isNanoFlow(sysConfig.value.flow)) {
                     val nanoReport = viewModel.nanoReport.collectAsState()
                     val nanoChipKeys = viewModel.nanoChipKeys.collectAsState()
                     WorkActionNanoReportBlock(
@@ -477,7 +477,7 @@ fun WorkMainBody(
             }
 
             WorkMainViewModel.ACTION_REPORT2 -> {
-                if (sysConfig.value.flow == "nano") {
+                if (ConfigSysBean.isNanoFlow(sysConfig.value.flow)) {
                     val nanoReport = viewModel.nanoReport.collectAsState()
                     val nanoChipKeys = viewModel.nanoChipKeys.collectAsState()
                     WorkActionNanoReportBlock(bean, nanoReport, nanoChipKeys)

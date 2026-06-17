@@ -29,7 +29,8 @@ class SysConfigSysViewModel : ViewModel() {
     fun onLoad() {
         viewState.value = ViewState.LoadingOver()
         viewModelScope.launch(Dispatchers.IO) {
-            bean.value = SysConfigService.findBean(ConfigSysBean.PREFIX, ConfigSysBean::class)
+            val loaded = SysConfigService.findBean(ConfigSysBean.PREFIX, ConfigSysBean::class)
+            bean.value = loaded.copy(flow = ConfigSysBean.defaultFlow(loaded.flow))
             viewState.value = ViewState.LoadSuccess()
         }
     }
@@ -62,7 +63,10 @@ class SysConfigSysViewModel : ViewModel() {
                 msg = App.getContext().getString(R.string.action_saving)
             )
         viewModelScope.launch(Dispatchers.IO) {
-            SysConfigService.saveBean(ConfigSysBean.PREFIX, bean.value)
+            SysConfigService.saveBean(
+                ConfigSysBean.PREFIX,
+                bean.value.copy(flow = ConfigSysBean.defaultFlow(bean.value.flow))
+            )
 
             if (bean.value.lang == AppLangUtils.getLanguage(App.getContext())) {
                 onClearInteraction()

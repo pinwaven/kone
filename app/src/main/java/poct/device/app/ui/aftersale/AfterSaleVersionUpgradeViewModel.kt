@@ -150,7 +150,7 @@ class AfterSaleVersionUpgradeViewModel : ViewModel() {
                     NanoApi.pendingUpgrade = null
                     remoteConfigBean = currentConfigBean.copy(software = pending.version)
                     downloadApkUrl = pending.url
-                } else if (sysConfig.flow == "nano") {
+                } else if (ConfigSysBean.isNanoFlow(sysConfig.flow)) {
                     val upgrade = NanoApi.checkUpgrade()
                     if (upgrade == null) {
                         throw Exception("Nano upgrade check failed")

@@ -42,10 +42,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import poct.device.app.BuildConfig
 import poct.device.app.AppParams
 import poct.device.app.R
-import poct.device.app.bean.ConfigInfoBean
-import poct.device.app.bean.ConfigInfoV2Bean
 import poct.device.app.bean.ConfigSysBean
 import poct.device.app.component.AppFilledButton
 import poct.device.app.component.AppScaffold
@@ -55,6 +54,8 @@ import poct.device.app.theme.bgColor
 import poct.device.app.thirdparty.NanoApi
 import poct.device.app.ui.aftersale.AfterSaleVersionUpgradeViewModel
 import poct.device.app.utils.app.VersionUtils
+
+internal const val SYS_FUN_API_TEST_OPEN_UPGRADE_TAB_KEY = "openUpgradeTab"
 
 private sealed class TestState {
     object Idle : TestState()
@@ -76,15 +77,29 @@ fun SysFunApiTest(navController: NavController) {
     val scope = rememberCoroutineScope()
     val upgradeVm: AfterSaleVersionUpgradeViewModel = viewModel()
     var config by remember { mutableStateOf(ConfigSysBean.Empty) }
-    var deviceConfig by remember { mutableStateOf(ConfigInfoV2Bean.Empty) }
-    var selectedTab by remember { mutableIntStateOf(0) }
+    val openUpgradeTab by navController.previousBackStackEntry
+        ?.savedStateHandle
+        ?.getStateFlow<Boolean?>(SYS_FUN_API_TEST_OPEN_UPGRADE_TAB_KEY, null)
+        ?.collectAsState()
+        ?: remember { mutableStateOf(null) }
+    var selectedTab by remember {
+        mutableIntStateOf(initialSysFunApiTestTab(openUpgradeTab))
+    }
     var state by remember { mutableStateOf<TestState>(TestState.Idle) }
     var upgradeState by remember { mutableStateOf<UpgradeCheckState>(UpgradeCheckState.Idle) }
     val nanoEnvironment by AppParams.runtimeModeState.nanoEnvironment.collectAsState()
 
+    LaunchedEffect(openUpgradeTab) {
+        if (openUpgradeTab == true) {
+            selectedTab = 1
+            navController.previousBackStackEntry
+                ?.savedStateHandle
+                ?.remove<Boolean>(SYS_FUN_API_TEST_OPEN_UPGRADE_TAB_KEY)
+        }
+    }
+
     LaunchedEffect(Unit) {
         config = SysConfigService.findBean(ConfigSysBean.PREFIX, ConfigSysBean::class)
-        deviceConfig = SysConfigService.findBean(ConfigInfoBean.PREFIX, ConfigInfoV2Bean::class)
     }
 
     // Mirror the ViewModel's actionState into our upgradeState so progress/errors show on this page
@@ -159,7 +174,7 @@ fun SysFunApiTest(navController: NavController) {
                             Spacer(Modifier.height(8.dp))
                             InfoRow(
                                 label = stringResource(id = R.string.sys_fun_api_test_flow),
-                                value = config.flow.ifEmpty { "clinical" },
+                                value = ConfigSysBean.defaultFlow(config.flow),
                             )
                         }
                     }
@@ -194,7 +209,7 @@ fun SysFunApiTest(navController: NavController) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             InfoRow(
                                 label = stringResource(id = R.string.sys_fun_api_upgrade_local_version),
-                                value = deviceConfig.software.ifEmpty { "—" },
+                                value = BuildConfig.VERSION_NAME.ifEmpty { "—" },
                             )
                         }
                     }
@@ -209,7 +224,7 @@ fun SysFunApiTest(navController: NavController) {
                                     resp == null -> UpgradeCheckState.Error("无法连接 Nano 升级接口")
                                     resp.version.isNullOrEmpty() || resp.url.isNullOrEmpty() ->
                                         UpgradeCheckState.Error("Nano 暂无可用版本")
-                                    VersionUtils.isLessThan(deviceConfig.software, resp.version) ->
+                                    VersionUtils.isLessThan(BuildConfig.VERSION_NAME, resp.version) ->
                                         UpgradeCheckState.Available(resp.version, resp.url)
                                     else -> UpgradeCheckState.UpToDate
                                 }
@@ -231,6 +246,9 @@ fun SysFunApiTest(navController: NavController) {
         }
     }
 }
+
+internal fun initialSysFunApiTestTab(openUpgradeTab: Boolean?): Int =
+    if (openUpgradeTab == true) 1 else 0
 
 @Composable
 private fun InfoRow(label: String, value: String) {

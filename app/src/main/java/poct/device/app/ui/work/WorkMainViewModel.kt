@@ -1859,7 +1859,7 @@ class WorkMainViewModel : ViewModel() {
 
     // ── Nano flow ───────────────────────────────────────────────────────────
 
-    private fun isNanoFlow(): Boolean = sysConfig.value.flow == NanoApi.FLOW_NANO
+    private fun isNanoFlow(): Boolean = ConfigSysBean.isNanoFlow(sysConfig.value.flow)
 
     /** Map a chip's declared biomarker_keys to the kone TYPE_* used by genResult. */
     private fun nanoTypeFor(biomarkerKeys: List<String>?): String? {

@@ -12,14 +12,22 @@ data class ConfigSysBean(
     var sf: String = "", // SF/CRP扫码类型
     var slj: String = "", // 4LJ扫码类型
 
-    // Nano AI flow toggle. Empty / "clinical" → existing fros-api + supabase
-    // path. "nano" → POST chip-scan results to the Waven Nano backend instead.
-    var flow: String = "",
+    // Nano AI flow toggle. Empty is treated as the default Nano flow for
+    // devices that have not persisted this setting yet.
+    var flow: String = FLOW_NANO,
     var nanoDeviceId: String = "",  // matches nano kino_devices.serial_number
 
 ) : ConfigBean {
     companion object {
         const val PREFIX = "sys_"
+        const val FLOW_CLINICAL = "clinical"
+        const val FLOW_NANO = "nano"
         val Empty = ConfigSysBean()
+
+        fun defaultFlow(flow: String): String =
+            flow.ifBlank { FLOW_NANO }
+
+        fun isNanoFlow(flow: String): Boolean =
+            defaultFlow(flow) == FLOW_NANO
     }
 }

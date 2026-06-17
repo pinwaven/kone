@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import poct.device.app.App
 import poct.device.app.serial.SerialQueryParams
+import poct.device.app.serial.ctl.CtlConstants
 import poct.device.app.serial.v2.CtlSerialMessageV2
 import poct.device.app.serial.v2.utils.SocketSidUtils
 import timber.log.Timber
@@ -250,6 +251,18 @@ object CtlCommandsV2 {
         val message = CtlSerialMessageV2()
         message.cmd = CtlConstantsV2.CMD_LD_PWR_OFFSET
         message.byteData = byteArrayOf(offset.toByte())
+        message.paramData = getParamData()
+        return message
+    }
+
+    /**
+     * 打开/关闭激光
+     */
+    fun powerLD(onOff: Boolean): CtlSerialMessageV2 {
+        val message = CtlSerialMessageV2()
+        message.cmd = CtlConstantsV2.CMD_GPIO_WRITE
+        val power: Byte = if (onOff) 0x01 else 0x00
+        message.byteData = byteArrayOf(CtlGpioConstV2.GPIO_LD_POWER, power)
         message.paramData = getParamData()
         return message
     }

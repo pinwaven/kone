@@ -155,8 +155,8 @@ val SysConfigSysCombineLangOptions = mapOf(
 )
 
 val SysConfigSysCombineFlowOptions = mapOf(
-    "clinical" to App.getContext().getString(R.string.sys_config_sys_f_flow_clinical),
-    "nano"     to App.getContext().getString(R.string.sys_config_sys_f_flow_nano)
+    ConfigSysBean.FLOW_CLINICAL to App.getContext().getString(R.string.sys_config_sys_f_flow_clinical),
+    ConfigSysBean.FLOW_NANO     to App.getContext().getString(R.string.sys_config_sys_f_flow_nano)
 )
 
 @Composable
@@ -221,14 +221,14 @@ private fun SysConfigSysCombineForm(
                 text = stringResource(id = R.string.sys_config_sys_f_flow),
             ) {
                 AppRadioGroup(
-                    value = bean.flow.ifEmpty { "clinical" },
+                    value = ConfigSysBean.defaultFlow(bean.flow),
                     readOnly = readOnly,
                     options = SysConfigSysCombineFlowOptions,
                     gap = 0.dp,
                     onValueChange = { onBeanUpdate(bean.copy(flow = it)) }
                 )
             }
-            if (bean.flow == "nano") {
+            if (ConfigSysBean.isNanoFlow(bean.flow)) {
                 AppFieldWrapper(
                     text = stringResource(id = R.string.sys_config_sys_f_nano_device_id),
                 ) {

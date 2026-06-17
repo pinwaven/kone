@@ -73,7 +73,7 @@ class SysFunInfoViewModel : ViewModel() {
             val configBean =
                 SysConfigService.findBean(ConfigInfoBean.PREFIX, ConfigInfoV2Bean::class)
 
-            if (sysConfig.flow == NanoApi.FLOW_NANO) {
+            if (ConfigSysBean.isNanoFlow(sysConfig.flow)) {
                 val firmwareVersion = readFirmwareVersion()
                 val localConfig = if (firmwareVersion.isNotBlank()) {
                     configBean.copy(hardware = firmwareVersion).also {
