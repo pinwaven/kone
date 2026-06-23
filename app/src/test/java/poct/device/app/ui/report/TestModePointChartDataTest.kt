@@ -48,7 +48,7 @@ class TestModePointChartDataTest {
     }
 
     @Test
-    fun toEntrySetsAddsRegionLinesPeakPointsAndStartPointsOnly() {
+    fun toEntrySetsAddsRegionLinesPeakPointsStartPointsAndEndPoints() {
         val points =
                 listOf(
                         CasePoint(0.0, 0.0),
@@ -65,15 +65,22 @@ class TestModePointChartDataTest {
 
         val entrySets = TestModePointChartData.toEntrySets(points, listOf(region))
 
-        assertEquals(4, entrySets.size)
+        // Series: main curve, region line, peak point, start point, end point
+        assertEquals(5, entrySets.size)
         assertEquals(points.size, entrySets[0].size)
         assertEquals(2, entrySets[1].size)
         assertEquals(1, entrySets[2].size)
         assertEquals(1, entrySets[3].size)
+        assertEquals(1, entrySets[4].size)
+        // Peak point
         assertEquals(80f, entrySets[2][0].x, 0.0f)
         assertEquals(31f, entrySets[2][0].y, 0.0f)
+        // Start point
         assertEquals(20f, entrySets[3][0].x, 0.0f)
         assertEquals(1f, entrySets[3][0].y, 0.0f)
+        // End point
+        assertEquals(140f, entrySets[4][0].x, 0.0f)
+        assertEquals(1f, entrySets[4][0].y, 0.0f)
     }
 
     @Test
@@ -223,7 +230,76 @@ class TestModePointChartDataTest {
 
         assertEquals(1, regions.size)
         assertEquals(1, regions[0].startIndex)
-        assertEquals(7, regions[0].endIndex)
+        // findMinInFlatTail: x=140(y=10) < x=160(y=9), minimum is at index 8 (x=160)
+        assertEquals(8, regions[0].endIndex)
+    }
+
+    @Test
+    fun findSlopeRegionsFindsMultipleRegionsEvenWithNoiseDipAtTrough() {
+        // Region 1 ends at a trough. A single noise dip (one steep segment, slope -0.27)
+        // sits 40 x-units after the trough before Region 2 begins rising.
+        // The algorithm must NOT let this single noise segment extend Region 1 past the trough
+        // and consume Region 2.
+        val regions =
+                TestModePointChartData.findSlopeRegions(
+                        listOf(
+                                CasePoint(0.0, 5.0),
+                                CasePoint(20.0, 6.0),
+                                CasePoint(40.0, 16.0),
+                                CasePoint(60.0, 26.0),
+                                CasePoint(80.0, 36.0),  // Peak1
+                                CasePoint(100.0, 26.0),
+                                CasePoint(120.0, 16.0),
+                                CasePoint(140.0, 6.0),
+                                CasePoint(160.0, 5.5),  // trough of Region 1
+                                CasePoint(180.0, 5.0),
+                                CasePoint(200.0, 4.7),
+                                CasePoint(210.0, 2.0),  // noise dip (slope ≈ -0.27, one segment)
+                                CasePoint(220.0, 4.5),  // recovers immediately
+                                CasePoint(240.0, 5.0),
+                                CasePoint(260.0, 15.0),
+                                CasePoint(280.0, 25.0), // Peak2
+                                CasePoint(300.0, 15.0),
+                                CasePoint(320.0, 5.0),
+                                CasePoint(340.0, 4.5),
+                                CasePoint(360.0, 4.5),
+                        )
+                )
+
+        assertEquals("Both regions must be detected", 2, regions.size)
+        assertEquals("First region peak at x=80", 80.0, regions[0].peakPoint.x, 0.0)
+        assertEquals("Second region peak at x=280", 280.0, regions[1].peakPoint.x, 0.0)
+    }
+
+    @Test
+    fun findSlopeRegionsFindsEndAfterSteepDropFollowingGentleDownslope() {
+        // Pattern: rise → peak → gentle downslope → brief flat → steep drop → flat bottom
+        // Bug: old algorithm stops at the brief flat between gentle and steep slopes.
+        // Fix: look ahead and continue if a steep drop follows within lookahead distance.
+        val regions =
+                TestModePointChartData.findSlopeRegions(
+                        listOf(
+                                CasePoint(0.0, 0.0),
+                                CasePoint(20.0, 1.0),
+                                CasePoint(40.0, 11.0),
+                                CasePoint(60.0, 21.0),
+                                CasePoint(80.0, 31.0),  // peak (index 4)
+                                CasePoint(100.0, 26.8), // gentle down (slope ≈ -0.21)
+                                CasePoint(120.0, 22.6), // gentle down (slope ≈ -0.21)
+                                CasePoint(140.0, 18.4), // gentle down (slope ≈ -0.21)
+                                CasePoint(160.0, 17.9), // brief flat (slope = -0.025) — old end
+                                CasePoint(180.0, 7.9),  // steep drop (slope = -0.5)
+                                CasePoint(200.0, 0.4),  // steep drop (slope ≈ -0.375)
+                                CasePoint(220.0, 0.1),  // near-flat (slope = -0.015) — true end
+                                CasePoint(240.0, 0.1),
+                        )
+                )
+
+        assertEquals(1, regions.size)
+        assertTrue(
+                "End should be after the steep drop, not at the brief flat mid-descent",
+                regions[0].endPoint.x >= 200.0,
+        )
     }
 
     @Test
@@ -247,7 +323,67 @@ class TestModePointChartDataTest {
 
         assertEquals(1, regions.size)
         assertEquals(1, regions[0].startIndex)
-        assertEquals(8, regions[0].endIndex)
+        // findMinInFlatTail: x=140(y=4.5) < x=160(y=3.5), minimum is at index 9 (x=160)
+        assertEquals(9, regions[0].endIndex)
+    }
+
+    @Test
+    fun findSlopeRegionsBacksUpToRiseStartWhenClampedBoundaryIsMidRise() {
+        // startIndex x=0, maxEndX=320.
+        // After peak (x=80), flat tail descends to local min at x=200 (y=5),
+        // then gently rises through boundary (slope≈0.0125 per unit, <=0.2 so findMinInFlatTail
+        // does not break there), then descends beyond boundary to deeper min at x=440 (y=2).
+        // findMinInFlatTail returns index 12 (x=440 > 320) → clamping triggers.
+        // Clamped boundary at x=320 is mid-rise → endIndex should back up to x=200 (local min).
+        val regions =
+                TestModePointChartData.findSlopeRegions(
+                        listOf(
+                                CasePoint(0.0, 0.0),
+                                CasePoint(20.0, 5.0),
+                                CasePoint(60.0, 20.0),
+                                CasePoint(80.0, 30.0),  // peak (index 3)
+                                CasePoint(120.0, 15.0),
+                                CasePoint(160.0, 8.0),
+                                CasePoint(200.0, 5.0),  // local min — expected endIndex=6
+                                CasePoint(240.0, 5.5),  // gentle rise (slope 0.0125)
+                                CasePoint(280.0, 6.0),
+                                CasePoint(320.0, 6.5),  // boundary x=320, still rising
+                                CasePoint(360.0, 5.0),
+                                CasePoint(400.0, 3.0),
+                                CasePoint(440.0, 2.0),  // deeper min beyond boundary
+                                CasePoint(480.0, 2.5),
+                                CasePoint(500.0, 8.0),  // upswing — findMinInFlatTail breaks here
+                        )
+                )
+
+        assertEquals(1, regions.size)
+        assertEquals(6, regions[0].endIndex)
+        assertEquals(200.0, regions[0].endPoint.x, 0.0)
+    }
+
+
+    @Test
+    fun findSlopeRegionsShrinkEndWhenCurveDipsBelowStartEndLine() {
+        // Start (0,10), peak (80,30), descent with uptick dip:
+        // x=120 y=5 (dip), x=140 y=6 (uptick), x=160 y=4 (deeper minimum = initial end)
+        // Line from (0,10) to (160,4): at x=120, line y=5.5 > curve y=5 → curve below line.
+        // Fix: shrink end to x=120 where curve stays above line from (0,10) to (120,5).
+        val regions =
+                TestModePointChartData.findSlopeRegions(
+                        listOf(
+                                CasePoint(0.0, 10.0),
+                                CasePoint(40.0, 20.0),
+                                CasePoint(80.0, 30.0),
+                                CasePoint(120.0, 5.0),
+                                CasePoint(140.0, 6.0),
+                                CasePoint(160.0, 4.0),
+                                CasePoint(200.0, 4.5),
+                        )
+                )
+
+        assertEquals(1, regions.size)
+        assertEquals(3, regions[0].endIndex)
+        assertEquals(120.0, regions[0].endPoint.x, 0.0)
     }
 
 }

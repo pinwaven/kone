@@ -2,8 +2,10 @@ package poct.device.app.ui.report
 
 import android.content.pm.ActivityInfo
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -123,17 +125,47 @@ fun TestModePointChart(
                     listOf(filledFontColor) +
                             slopeRegions.map { Color.Red } +
                             slopeRegions.map { Color.Yellow } +
-                            slopeRegions.map { Color.Blue }
+                            slopeRegions.map { Color.Blue } +
+                            slopeRegions.map { Color.Green }
                 }
                 val pointSeriesStartIndex = remember(slopeRegions) { 1 + slopeRegions.size }
                 ProvideChartStyle(
                         rememberTestModePointChartStyle(
                                 lineChartColors = chartColors,
                                 pointSeriesStartIndex = pointSeriesStartIndex,
-                                wide = 8f,
+                                wide = 2f,
+                                pointSize = 6f,
                         )
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
+                        if (slopeRegions.isNotEmpty()) {
+                            Row(
+                                    modifier =
+                                            Modifier.align(Alignment.TopCenter)
+                                                    .padding(top = 8.dp)
+                                                    .background(
+                                                            color = bgColor.copy(alpha = 0.86f),
+                                                            shape = RoundedCornerShape(4.dp),
+                                                    )
+                                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                            ) {
+                                slopeRegions.chunked(2).filter { it.size == 2 }.forEach { pair ->
+                                    val ratio = if (pair[1].area != 0.0) pair[0].area / pair[1].area else 0.0
+                                    Text(
+                                            text = String.format(
+                                                    Locale.US,
+                                                    "%.2f/%.2f=%.2f",
+                                                    pair[0].area,
+                                                    pair[1].area,
+                                                    ratio,
+                                            ),
+                                            color = fontColor,
+                                            fontSize = 12.sp,
+                                    )
+                                }
+                            }
+                        }
                         Chart(
                                 modifier =
                                         Modifier.fillMaxSize()
@@ -156,28 +188,6 @@ fun TestModePointChart(
                                 marker = marker,
                                 runInitialAnimation = false,
                         )
-                        if (slopeRegions.isNotEmpty()) {
-                            Column(
-                                    modifier =
-                                            Modifier.align(Alignment.TopEnd)
-                                                    .padding(16.dp)
-                                                    .background(
-                                                            color = bgColor.copy(alpha = 0.86f),
-                                                            shape = RoundedCornerShape(4.dp),
-                                                    )
-                                                    .padding(horizontal = 10.dp, vertical = 8.dp)
-                            ) {
-                                slopeRegions.forEachIndexed { index, region ->
-                                    Text(
-                                            text =
-                                                    "区域${index + 1}: " +
-                                                            String.format(Locale.US, "%.2f", region.area),
-                                            color = fontColor,
-                                            fontSize = 12.sp,
-                                    )
-                                }
-                            }
-                        }
                     }
                 }
             }

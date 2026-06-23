@@ -58,6 +58,7 @@ import com.patrykandpatrick.vico.core.axis.AxisPosition
 import com.patrykandpatrick.vico.core.axis.formatter.AxisValueFormatter
 import com.patrykandpatrick.vico.core.chart.layout.HorizontalLayout
 import com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer
+import com.patrykandpatrick.vico.core.entry.FloatEntry
 import com.patrykandpatrick.vico.core.marker.MarkerLabelFormatter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -93,6 +94,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.util.Locale
 
 /**
  * 页面定义
@@ -713,7 +715,8 @@ private fun OneKeyTestResultChart(
         listOf(filledFontColor) +
             slopeRegions.map { Color.Red } +
             slopeRegions.map { Color.Yellow } +
-            slopeRegions.map { Color.Blue }
+            slopeRegions.map { Color.Blue } +
+            slopeRegions.map { Color.Green }
     }
     val pointSeriesStartIndex = remember(slopeRegions) { 1 + slopeRegions.size }
     ProvideChartStyle(
@@ -721,6 +724,7 @@ private fun OneKeyTestResultChart(
             lineChartColors = chartColors,
             pointSeriesStartIndex = pointSeriesStartIndex,
             wide = 2f,
+            pointSize = 6f,
         )
     ) {
         Box(
@@ -728,6 +732,34 @@ private fun OneKeyTestResultChart(
                 .fillMaxSize()
                 .padding(horizontal = 30.dp, vertical = 20.dp)
         ) {
+            if (slopeRegions.isNotEmpty()) {
+                Row(
+                    modifier =
+                        Modifier.align(Alignment.TopCenter)
+                            .padding(top = 8.dp)
+                            .background(
+                                color = Color(0xFFF8F8F8).copy(alpha = 0.86f),
+                                shape = RoundedCornerShape(4.dp),
+                            )
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                ) {
+                    slopeRegions.chunked(2).filter { it.size == 2 }.forEach { pair ->
+                        val ratio = if (pair[1].area != 0.0) pair[0].area / pair[1].area else 0.0
+                        Text(
+                            text = String.format(
+                                Locale.US,
+                                "%.2f/%.2f=%.2f",
+                                pair[0].area,
+                                pair[1].area,
+                                ratio,
+                            ),
+                            color = fontColor,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+            }
             Chart(
                 modifier = Modifier.fillMaxSize(),
                 chart = lineChart(spacing = 1.dp),
@@ -756,6 +788,19 @@ internal fun oneKeyChartDialogOpenOrientation(): Int = ActivityInfo.SCREEN_ORIEN
 internal fun oneKeyChartDialogCloseOrientation(): Int = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
 
 internal fun oneKeyChartDialogUsePlatformDefaultWidth(): Boolean = false
+
+internal data class OneKeyChartData(
+    val slopeRegions: List<TestModeSlopeRegion>,
+    val entrySets: List<List<FloatEntry>>,
+)
+
+internal fun buildOneKeyChartData(points: List<CasePoint>): OneKeyChartData {
+    val regions = TestModePointChartData.findSlopeRegions(points)
+    return OneKeyChartData(
+        slopeRegions = regions,
+        entrySets = TestModePointChartData.toEntrySets(points, regions),
+    )
+}
 
 enum class OneKeyStepStatus {
     Pending,
@@ -978,7 +1023,7 @@ class SampleSerialViewModel : ViewModel() {
                         ("setLDPwr: $setLDPwr")
                 }
 
-                val result = CtlCommandsV2.readAllData(CtlCommandsV2.scan(-16000, 16000))
+                val result = CtlCommandsV2.readAllData(CtlCommandsV2.scan(-16000, 14000))
 
                 withContext(Dispatchers.Main) {
                     text.value =
@@ -1203,10 +1248,9 @@ class SampleSerialViewModel : ViewModel() {
                     moveInForOneKey()
                     text.value = "快速扫描: 扫描芯片中..."
                     val points = scanAndReadPointsForOneKey()
-                    oneKeyTestSlopeRegions.value = emptyList()
-                    oneKeyChartModelProducer.setEntries(
-                        listOf(TestModePointChartData.toEntries(points))
-                    )
+                    val chartData = buildOneKeyChartData(points)
+                    oneKeyTestSlopeRegions.value = chartData.slopeRegions
+                    oneKeyChartModelProducer.setEntries(chartData.entrySets)
                     oneKeyTestChartVisible.value = true
                     text.value = "快速扫描: 扫描结果图已显示"
                     //ejectCaseForOneKeyChart()
@@ -1252,10 +1296,9 @@ class SampleSerialViewModel : ViewModel() {
                     runOneKeyStep(3) { absorbForOneKey(milliseconds = 10 * 1000) }
                     runOneKeyStep(4) {
                         val points = scanAndReadPointsForOneKey()
-                        oneKeyTestSlopeRegions.value = emptyList()
-                        oneKeyChartModelProducer.setEntries(
-                            listOf(TestModePointChartData.toEntries(points))
-                        )
+                        val chartData = buildOneKeyChartData(points)
+                        oneKeyTestSlopeRegions.value = chartData.slopeRegions
+                        oneKeyChartModelProducer.setEntries(chartData.entrySets)
                     }
                     runOneKeyStep(5) {
                         oneKeyTestChartVisible.value = true
@@ -1458,7 +1501,7 @@ class SampleSerialViewModel : ViewModel() {
                 }
             }
             val moveToSsResult =
-                CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
+                CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -80000, 10000, 1))
             Timber.w("one key reset moveToSsResult: $moveToSsResult")
             waitPollForOneKey("片仓复位移出", 15_000L) {
                 it.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)
@@ -1528,7 +1571,7 @@ class SampleSerialViewModel : ViewModel() {
             Timber.w("one key getLDPwr: $getLDPwr")
             val setLDPwr = CtlCommandsV2.readAllData(CtlCommandsV2.setLDPwr(-25))
             Timber.w("one key setLDPwr: $setLDPwr")
-            val scanResult = CtlCommandsV2.readAllData(CtlCommandsV2.scan(-16000, 16000))
+            val scanResult = CtlCommandsV2.readAllData(CtlCommandsV2.scan(-16000, 14000))
             var needReset = scanResult.startsWith("!|scan:-3")
             Timber.w("one key scanResult: $scanResult ${needReset}")
 
@@ -1557,7 +1600,7 @@ class SampleSerialViewModel : ViewModel() {
                 }
 
                 // 再扫描一次
-                val rescannedResult = CtlCommandsV2.readAllData(CtlCommandsV2.scan(-16000, 16000))
+                val rescannedResult = CtlCommandsV2.readAllData(CtlCommandsV2.scan(-16000, 14000))
                 Timber.w("one key scanResult: $rescannedResult ${rescannedResult.startsWith("!|scan:-3")}")
                 waitPollForOneKey("扫描芯片", 30_000L) {
                     it.contains(CtlConstantsV2.CMD_ACTION_SCAN_STATUS_COMPLETED)

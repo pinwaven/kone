@@ -83,13 +83,21 @@ fun rememberTestModePointChartStyle(
     lineChartColors: List<Color>,
     pointSeriesStartIndex: Int,
     wide: Float,
+    pointSize: Float = 12f,
 ): ChartStyle {
     val isSystemInDarkTheme = isSystemInDarkTheme()
     val pointComponents =
         lineChartColors.map { color ->
             shapeComponent(Shapes.pillShape, color)
         }
-    return remember(lineChartColors, pointSeriesStartIndex, wide, isSystemInDarkTheme, pointComponents) {
+    return remember(
+        lineChartColors,
+        pointSeriesStartIndex,
+        wide,
+        pointSize,
+        isSystemInDarkTheme,
+        pointComponents,
+    ) {
         val defaultColors = if (isSystemInDarkTheme) DefaultColors.Dark else DefaultColors.Light
         ChartStyle(
             ChartStyle.Axis(
@@ -126,7 +134,7 @@ fun rememberTestModePointChartStyle(
                                 )
                             },
                         point = if (isPointSeries) pointComponents[index] else null,
-                        pointSizeDp = if (isPointSeries) 12f else 0f,
+                        pointSizeDp = if (isPointSeries) pointSize else 0f,
                     )
                 },
             ),

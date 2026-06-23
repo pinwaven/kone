@@ -21,6 +21,8 @@ object TestModePointChartData {
     private const val MIN_REGION_X_DISTANCE = 75.0
     private const val MIN_PEAK_TO_END_X_DISTANCE = 50.0
     private const val MIN_PEAK_START_HEIGHT_DIFF = 5.0
+    private const val STEEP_DROP_LOOKAHEAD_X_DISTANCE = 100.0
+    private const val MAX_REGION_X_DISTANCE = 320.0
 
     fun parsePoints(workPoints: String): List<CasePoint> {
         if (workPoints.isBlank()) {
@@ -56,7 +58,11 @@ object TestModePointChartData {
                 regions.map { region ->
                     listOf(FloatEntry(region.startPoint.x.toFloat(), region.startPoint.y.toFloat()))
                 }
-        return listOf(toEntries(points)) + regionLines + peakPoints + boundaryPoints
+        val endPoints =
+                regions.map { region ->
+                    listOf(FloatEntry(region.endPoint.x.toFloat(), region.endPoint.y.toFloat()))
+                }
+        return listOf(toEntries(points)) + regionLines + peakPoints + boundaryPoints + endPoints
     }
 
     fun findSlopeRegions(
@@ -77,7 +83,7 @@ object TestModePointChartData {
                 continue
             }
 
-            val startIndex = findLeftFlatPoint(points, index, flatSlopeThreshold)
+            var startIndex = findLeftFlatPoint(points, index, flatSlopeThreshold)
             var endIndex =
                     findRightFlatPoint(
                             points = points,
@@ -106,6 +112,27 @@ object TestModePointChartData {
                 endIndex = recalculatedEndIndex
                 peakIndex = recalculatedPeakIndex
             }
+            // Clamp end to MAX_REGION_X_DISTANCE from start
+            val maxEndX = points[startIndex].x + MAX_REGION_X_DISTANCE
+            if (points[endIndex].x > maxEndX) {
+                endIndex = (startIndex..endIndex).last { points[it].x <= maxEndX }
+                // If clamped boundary is mid-rise, back up to start of that rise
+                endIndex = findRiseStartAtBoundary(points, endIndex)
+                peakIndex = findHighestPoint(points, startIndex, endIndex)
+            }
+
+            // Ensure curve stays above start-end line;
+            // advance start if violation is before peak, shrink end if violation is after peak
+            val (adjStart, adjEnd, adjPeak) =
+                    adjustBoundsToKeepAboveLine(points, startIndex, endIndex, peakIndex)
+            startIndex = adjStart
+            endIndex = adjEnd
+            peakIndex = adjPeak
+            if (points[endIndex].x - points[startIndex].x < minRegionXDistance) {
+                index++
+                continue
+            }
+
             if (points[peakIndex].y - points[startIndex].y < MIN_PEAK_START_HEIGHT_DIFF) {
                 index++
                 continue
@@ -168,14 +195,101 @@ object TestModePointChartData {
                 continue
             }
             val peakToEndXDistance = points[index].x - points[peakIndex].x
-            if (hasDownwardSlope &&
-                            peakToEndXDistance >= minPeakToEndXDistance
-            ) {
-                return index
+            if (hasDownwardSlope && peakToEndXDistance >= minPeakToEndXDistance) {
+                if (!hasSteepDropAhead(points, index, flatSlopeThreshold)) {
+                    return findMinInFlatTail(points, index, flatSlopeThreshold)
+                }
             }
             index++
         }
         return index
+    }
+
+    private fun findMinInFlatTail(
+            points: List<CasePoint>,
+            fromIndex: Int,
+            flatSlopeThreshold: Double,
+    ): Int {
+        var minIndex = fromIndex
+        var i = fromIndex
+        while (i < points.lastIndex) {
+            if (slope(points[i], points[i + 1]) > flatSlopeThreshold) break
+            if (points[i].y < points[minIndex].y) minIndex = i
+            i++
+        }
+        return minIndex
+    }
+
+    private fun hasSteepDropAhead(
+            points: List<CasePoint>,
+            fromIndex: Int,
+            flatSlopeThreshold: Double,
+    ): Boolean {
+        val limitX = points[fromIndex].x + STEEP_DROP_LOOKAHEAD_X_DISTANCE
+        var i = fromIndex
+        var consecutiveSteepCount = 0
+        while (i < points.lastIndex && points[i].x < limitX) {
+            if (slope(points[i], points[i + 1]) < -flatSlopeThreshold) {
+                consecutiveSteepCount++
+                if (consecutiveSteepCount >= 2) return true
+            } else {
+                consecutiveSteepCount = 0
+            }
+            i++
+        }
+        return false
+    }
+
+
+    private fun adjustBoundsToKeepAboveLine(
+            points: List<CasePoint>,
+            startIndex: Int,
+            endIndex: Int,
+            peakIndex: Int,
+    ): Triple<Int, Int, Int> {
+        var start = startIndex
+        var end = endIndex
+        var peak = peakIndex
+        repeat(points.size) {
+            val violation = findFirstViolation(points, start, end)
+            if (violation == -1) return Triple(start, end, peak)
+            if (violation <= peak) {
+                // violation before peak: advance start to violation point
+                if (violation >= peak) return Triple(start, end, peak)
+                start = violation
+            } else {
+                // violation after peak: shrink end to violation point
+                if (violation <= start) return Triple(start, end, peak)
+                end = violation
+            }
+            peak = findHighestPoint(points, start, end)
+        }
+        return Triple(start, end, peak)
+    }
+
+    private fun findFirstViolation(
+            points: List<CasePoint>,
+            startIndex: Int,
+            endIndex: Int,
+    ): Int {
+        val startPoint = points[startIndex]
+        val endPoint = points[endIndex]
+        val dx = endPoint.x - startPoint.x
+        if (dx <= 0.0) return -1
+        for (i in startIndex + 1 until endIndex) {
+            val lineY = interpolateLineY(startPoint, endPoint, points[i].x, dx)
+            if (points[i].y < lineY) return i
+        }
+        return -1
+    }
+
+
+    private fun findRiseStartAtBoundary(points: List<CasePoint>, boundaryIndex: Int): Int {
+        var i = boundaryIndex
+        while (i > 0 && slope(points[i - 1], points[i]) > 0.0) {
+            i--
+        }
+        return i
     }
 
     private fun slope(startPoint: CasePoint, endPoint: CasePoint): Double {
