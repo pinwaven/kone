@@ -1,6 +1,7 @@
 package poct.device.app.ui.setting
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,23 +13,39 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -49,15 +66,18 @@ import poct.device.app.component.AppMenuCardItem
 import poct.device.app.component.AppOutlinedButton
 import poct.device.app.component.AppPreviewWrapper
 import poct.device.app.component.AppScaffold
-import poct.device.app.component.AppTextField
 import poct.device.app.component.AppTopBar
 import poct.device.app.component.AppViewWrapper
 import poct.device.app.entity.User
 import poct.device.app.state.ViewState
 import poct.device.app.theme.bgColor
+import poct.device.app.theme.borderColor
 import poct.device.app.theme.fontColor
+import poct.device.app.theme.inputBgColor
+import poct.device.app.theme.inputFontColor
 import poct.device.app.ui.home.HomeWorkPre
 import poct.device.app.utils.app.AppToastUtil
+import kotlinx.coroutines.delay
 
 /**
  * 页面定义
@@ -112,6 +132,19 @@ fun SettingMainBody(
     val workPreVisible = viewModel.workPreVisible.collectAsState()
     var factoryTestPasswordVisible by remember { mutableStateOf(false) }
     var factoryTestPassword by remember { mutableStateOf("") }
+    fun submitFactoryTestPassword() {
+        val result = submitFactoryTestPassword(factoryTestPassword) {
+            AppParams.runtimeModeState.unlockFactoryTest(it)
+        }
+        factoryTestPasswordVisible = result.dialogVisible
+        factoryTestPassword = result.password
+        if (result.navigateToFactoryTest) {
+            navController.navigate(RouteConfig.SAMPLE_SERIAL)
+        }
+        if (result.showWrongPassword) {
+            AppToastUtil.shortShow(App.getContext().getString(R.string.msg_wrong_password))
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -234,15 +267,7 @@ fun SettingMainBody(
                         factoryTestPasswordVisible = false
                         factoryTestPassword = ""
                     },
-                    onConfirm = {
-                        if (AppParams.runtimeModeState.unlockFactoryTest(factoryTestPassword)) {
-                            factoryTestPasswordVisible = false
-                            factoryTestPassword = ""
-                            navController.navigate(RouteConfig.SAMPLE_SERIAL)
-                        } else {
-                            AppToastUtil.shortShow(App.getContext().getString(R.string.msg_wrong_password))
-                        }
-                    }
+                    onConfirm = ::submitFactoryTestPassword
                 )
             }
             if (AppParams.curUser.role != User.ROLE_CHECKER) {
@@ -292,6 +317,43 @@ private fun FactoryTestPasswordDialog(
         onDismissRequest = onCancel,
         properties = DialogProperties(dismissOnClickOutside = false)
     ) {
+        val view = LocalView.current
+        if (!view.isInEditMode) {
+            SideEffect {
+                val window = (view.parent as? DialogWindowProvider)?.window
+                window?.let {
+                    WindowCompat.setDecorFitsSystemWindows(it, false)
+                    WindowInsetsControllerCompat(it, view).apply {
+                        hide(WindowInsetsCompat.Type.navigationBars())
+                        systemBarsBehavior =
+                            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    }
+                }
+            }
+        }
+        val focusRequester = remember { FocusRequester() }
+        val keyboardController = LocalSoftwareKeyboardController.current
+        var textFieldValue by remember {
+            mutableStateOf(
+                TextFieldValue(
+                    text = password,
+                    selection = TextRange(password.length)
+                )
+            )
+        }
+        LaunchedEffect(password) {
+            if (textFieldValue.text != password) {
+                textFieldValue = TextFieldValue(
+                    text = password,
+                    selection = TextRange(password.length)
+                )
+            }
+        }
+        LaunchedEffect(Unit) {
+            delay(100)
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
         Surface(
             modifier = Modifier
                 .width(280.dp)
@@ -320,14 +382,60 @@ private fun FactoryTestPasswordDialog(
                     text = stringResource(id = R.string.factory_test_password_content)
                 )
                 Row(modifier = Modifier.height(36.dp)) {
-                    AppTextField(
-                        value = password,
-                        focusState = true,
-                        borderWidth = 1.dp,
-                        placeHolder = stringResource(id = R.string.confirm_password_pwd),
+                    val placeHolder = stringResource(id = R.string.confirm_password_pwd)
+                    BasicTextField(
+                        value = textFieldValue,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .focusRequester(focusRequester)
+                            .background(inputBgColor)
+                            .border(
+                                width = 1.dp,
+                                color = borderColor,
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 12.dp),
+                        singleLine = true,
+                        textStyle = TextStyle(
+                            fontSize = 14.sp,
+                            color = inputFontColor,
+                        ),
                         visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        onValueChange = onPasswordChange
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.NumberPassword,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(onDone = { onConfirm() }),
+                        onValueChange = { incoming ->
+                            val digits = incoming.text.filter(Char::isDigit).take(16)
+                            textFieldValue = if (digits == incoming.text) {
+                                incoming
+                            } else {
+                                TextFieldValue(
+                                    text = digits,
+                                    selection = TextRange(digits.length)
+                                )
+                            }
+                            onPasswordChange(digits)
+                        },
+                        decorationBox = { innerTextField ->
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                if (textFieldValue.text.isEmpty()) {
+                                    Text(
+                                        text = placeHolder,
+                                        color = poct.device.app.theme.placeHolderColor,
+                                        style = TextStyle(
+                                            fontSize = 14.sp,
+                                            color = inputFontColor
+                                        )
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        }
                     )
                 }
                 Row(
@@ -353,6 +461,34 @@ private fun FactoryTestPasswordDialog(
                 }
             }
         }
+    }
+}
+
+internal data class FactoryTestPasswordSubmitResult(
+    val dialogVisible: Boolean,
+    val password: String,
+    val navigateToFactoryTest: Boolean,
+    val showWrongPassword: Boolean,
+)
+
+internal fun submitFactoryTestPassword(
+    password: String,
+    unlockFactoryTest: (String) -> Boolean,
+): FactoryTestPasswordSubmitResult {
+    return if (unlockFactoryTest(password)) {
+        FactoryTestPasswordSubmitResult(
+            dialogVisible = false,
+            password = "",
+            navigateToFactoryTest = true,
+            showWrongPassword = false,
+        )
+    } else {
+        FactoryTestPasswordSubmitResult(
+            dialogVisible = true,
+            password = "",
+            navigateToFactoryTest = false,
+            showWrongPassword = true,
+        )
     }
 }
 

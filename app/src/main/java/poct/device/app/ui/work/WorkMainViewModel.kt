@@ -266,7 +266,7 @@ class WorkMainViewModel : ViewModel() {
         actionState.value = ActionState(event = EVT_EXIT)
     }
 
-    /** 第一步：开始页(信息录入) 1、读取扫码配置、判断是否手动设置项目； 2、是，进入手动设置项目页 3、否，移出片仓 */
+    /** 第一步：开始页(信息录入) 1、读取扫码配置、判断是否手动设置项目； 2、是，进入手动设置项目页; 3、否，移出片仓; */
     fun onActionStartNext() {
         viewState.value = ViewState.LoadingOver()
 

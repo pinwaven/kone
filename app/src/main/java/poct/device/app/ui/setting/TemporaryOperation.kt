@@ -16,12 +16,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,7 +36,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -45,6 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.navigation.NavController
@@ -87,8 +95,43 @@ fun TemporaryOperation(navController: NavController) {
             var scanTimeMillis by remember { mutableStateOf("14000") }
             var laserPower by remember { mutableStateOf("-25") }
             var editingField by remember { mutableStateOf<TestModeConfigField?>(null) }
+            var editingOriginalValue by remember { mutableStateOf("") }
             var autoShowKeyboard by remember { mutableStateOf(true) }
             val coroutineScope = rememberCoroutineScope()
+            fun testModeConfigValues() = TestModeConfigValues(
+                reactionTimeSeconds = reactionTimeSeconds,
+                absorbTimeMillis = absorbTimeMillis,
+                scanTimeMillis = scanTimeMillis,
+                laserPower = laserPower,
+            )
+
+            fun applyTestModeConfigValues(values: TestModeConfigValues) {
+                reactionTimeSeconds = values.reactionTimeSeconds
+                absorbTimeMillis = values.absorbTimeMillis
+                scanTimeMillis = values.scanTimeMillis
+                laserPower = values.laserPower
+            }
+
+            fun openTestModeConfigEdit(field: TestModeConfigField) {
+                autoShowKeyboard = true
+                editingOriginalValue = testModeConfigValues().valueOf(field)
+                editingField = field
+            }
+
+            fun cancelTestModeConfigEdit() {
+                val field = editingField
+                if (field != null) {
+                    applyTestModeConfigValues(
+                        restoreTestModeConfigValue(
+                            values = testModeConfigValues(),
+                            field = field,
+                            originalValue = editingOriginalValue,
+                        )
+                    )
+                }
+                editingField = null
+                editingOriginalValue = ""
+            }
 
             LaunchedEffect(Unit) {
                 val config = TestModeConfigService.findBean()
@@ -168,8 +211,7 @@ fun TemporaryOperation(navController: NavController) {
                         value = reactionTimeSeconds,
                         unit = stringResource(id = R.string.test_mode_reaction_time_unit),
                         onClick = {
-                            autoShowKeyboard = true
-                            editingField = TestModeConfigField.REACTION_TIME
+                            openTestModeConfigEdit(TestModeConfigField.REACTION_TIME)
                         }
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -178,8 +220,7 @@ fun TemporaryOperation(navController: NavController) {
                         value = absorbTimeMillis,
                         unit = stringResource(id = R.string.test_mode_millisecond_unit),
                         onClick = {
-                            autoShowKeyboard = true
-                            editingField = TestModeConfigField.ABSORB_TIME
+                            openTestModeConfigEdit(TestModeConfigField.ABSORB_TIME)
                         }
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -188,8 +229,7 @@ fun TemporaryOperation(navController: NavController) {
                         value = scanTimeMillis,
                         unit = stringResource(id = R.string.test_mode_millisecond_unit),
                         onClick = {
-                            autoShowKeyboard = true
-                            editingField = TestModeConfigField.SCAN_TIME
+                            openTestModeConfigEdit(TestModeConfigField.SCAN_TIME)
                         }
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -198,8 +238,7 @@ fun TemporaryOperation(navController: NavController) {
                         value = laserPower,
                         unit = "",
                         onClick = {
-                            autoShowKeyboard = true
-                            editingField = TestModeConfigField.LASER_POWER
+                            openTestModeConfigEdit(TestModeConfigField.LASER_POWER)
                         }
                     )
                 }
@@ -266,10 +305,11 @@ fun TemporaryOperation(navController: NavController) {
                         null -> Unit
                     }
                 },
-                onCancel = { editingField = null },
+                onCancel = { cancelTestModeConfigEdit() },
                 onConfirm = {
                     val field = editingField
                     editingField = null
+                    editingOriginalValue = ""
                     coroutineScope.launch {
                         when (field) {
                             TestModeConfigField.REACTION_TIME -> {
@@ -349,10 +389,27 @@ private fun TestModeNumberDialog(
         return
     }
 
-    Dialog(onDismissRequest = onCancel) {
+    Dialog(
+        onDismissRequest = onCancel,
+        properties = DialogProperties(dismissOnClickOutside = false)
+    ) {
+        val view = LocalView.current
+        if (!view.isInEditMode) {
+            SideEffect {
+                val window = (view.parent as? DialogWindowProvider)?.window
+                window?.let {
+                    WindowCompat.setDecorFitsSystemWindows(it, false)
+                    WindowInsetsControllerCompat(it, view).apply {
+                        hide(WindowInsetsCompat.Type.navigationBars())
+                        systemBarsBehavior =
+                            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    }
+                }
+            }
+        }
         val focusRequester = remember { FocusRequester() }
         val keyboardController = LocalSoftwareKeyboardController.current
-        var textFieldValue by remember(value) {
+        var textFieldValue by remember {
             mutableStateOf(
                 TextFieldValue(
                     text = value,
@@ -432,16 +489,21 @@ private fun TestModeNumberDialog(
                             keyboardType = KeyboardType.Number,
                             imeAction = ImeAction.Done
                         ),
-                        onValueChange = {
+                        keyboardActions = KeyboardActions(onDone = { onConfirm() }),
+                        onValueChange = { incoming ->
                             val digits = if (signed) {
-                                it.text.filterSignedInt()
+                                incoming.text.filterSignedInt()
                             } else {
-                                it.text.filter(Char::isDigit)
+                                incoming.text.filter(Char::isDigit)
                             }
-                            textFieldValue = TextFieldValue(
-                                text = digits,
-                                selection = TextRange(digits.length)
-                            )
+                            textFieldValue = if (digits == incoming.text) {
+                                incoming
+                            } else {
+                                TextFieldValue(
+                                    text = digits,
+                                    selection = TextRange(digits.length)
+                                )
+                            }
                             onValueChange(digits)
                         },
                         decorationBox = { innerTextField ->
@@ -488,11 +550,40 @@ private fun TestModeNumberDialog(
     }
 }
 
-private enum class TestModeConfigField {
+internal data class TestModeConfigValues(
+    val reactionTimeSeconds: String,
+    val absorbTimeMillis: String,
+    val scanTimeMillis: String,
+    val laserPower: String,
+)
+
+internal enum class TestModeConfigField {
     REACTION_TIME,
     ABSORB_TIME,
     SCAN_TIME,
     LASER_POWER,
+}
+
+internal fun TestModeConfigValues.valueOf(field: TestModeConfigField): String {
+    return when (field) {
+        TestModeConfigField.REACTION_TIME -> reactionTimeSeconds
+        TestModeConfigField.ABSORB_TIME -> absorbTimeMillis
+        TestModeConfigField.SCAN_TIME -> scanTimeMillis
+        TestModeConfigField.LASER_POWER -> laserPower
+    }
+}
+
+internal fun restoreTestModeConfigValue(
+    values: TestModeConfigValues,
+    field: TestModeConfigField,
+    originalValue: String,
+): TestModeConfigValues {
+    return when (field) {
+        TestModeConfigField.REACTION_TIME -> values.copy(reactionTimeSeconds = originalValue)
+        TestModeConfigField.ABSORB_TIME -> values.copy(absorbTimeMillis = originalValue)
+        TestModeConfigField.SCAN_TIME -> values.copy(scanTimeMillis = originalValue)
+        TestModeConfigField.LASER_POWER -> values.copy(laserPower = originalValue)
+    }
 }
 
 private fun String.filterSignedInt(): String {
