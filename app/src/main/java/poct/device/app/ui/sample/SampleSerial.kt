@@ -949,7 +949,7 @@ class SampleSerialViewModel : ViewModel() {
             text.value = ("片仓移入中。。。")
             withContext(Dispatchers.IO) {
                 val moveToSsResult =
-                    CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, 88888, 10000, 0))
+                    CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, MOTOR_VELOCITY, MOTOR_DURATION_MS, 0))
                 Timber.d("moveToSsResult: $moveToSsResult")
 
                 // 等待成功
@@ -964,7 +964,7 @@ class SampleSerialViewModel : ViewModel() {
             text.value = ("片仓移出中。。。")
             withContext(Dispatchers.IO) {
                 val moveToSsResult =
-                    CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
+                    CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -MOTOR_VELOCITY, MOTOR_DURATION_MS, 1))
                 Timber.d("moveToSsResult: $moveToSsResult")
 
                 // 等待成功
@@ -1023,7 +1023,7 @@ class SampleSerialViewModel : ViewModel() {
                         ("setLDPwr: $setLDPwr")
                 }
 
-                val result = CtlCommandsV2.readAllData(CtlCommandsV2.scan(-16000, 14000))
+                val result = CtlCommandsV2.readAllData(CtlCommandsV2.scan(SCAN_VELOCITY, SCAN_DURATION_MS))
 
                 withContext(Dispatchers.Main) {
                     text.value =
@@ -1159,7 +1159,7 @@ class SampleSerialViewModel : ViewModel() {
             } else {
                 withContext(Dispatchers.IO) {
                     val moveToSsResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
+                        CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -MOTOR_VELOCITY, MOTOR_DURATION_MS, 1))
                     Timber.w("moveToSsResult: $moveToSsResult")
 
                     // 等待成功
@@ -1536,7 +1536,7 @@ class SampleSerialViewModel : ViewModel() {
     private suspend fun ejectCaseForOneKeyChart() {
         withContext(Dispatchers.IO) {
             val moveToSsResult =
-                CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
+                CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -MOTOR_VELOCITY, MOTOR_DURATION_MS, 1))
             Timber.w("one key chart eject moveToSsResult: $moveToSsResult")
             waitPollForOneKey("片仓弹出", 15_000L) {
                 it.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)
@@ -1547,7 +1547,7 @@ class SampleSerialViewModel : ViewModel() {
     private suspend fun moveInForOneKey() {
         withContext(Dispatchers.IO) {
             val moveToSsResult =
-                CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, 88888, 10000, 0))
+                CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, MOTOR_VELOCITY, MOTOR_DURATION_MS, 0))
             Timber.w("one key moveInResult: $moveToSsResult")
             waitPollForOneKey("片仓移入", 15_000L) {
                 it.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)
@@ -1569,20 +1569,17 @@ class SampleSerialViewModel : ViewModel() {
         return withContext(Dispatchers.IO) {
             val getLDPwr = CtlCommandsV2.readAllData(CtlCommandsV2.getLDPwr())
             Timber.w("one key getLDPwr: $getLDPwr")
-            val setLDPwr = CtlCommandsV2.readAllData(CtlCommandsV2.setLDPwr(-25))
+            val setLDPwr = CtlCommandsV2.readAllData(CtlCommandsV2.setLDPwr(SCAN_LD_PWR))
             Timber.w("one key setLDPwr: $setLDPwr")
-            val scanResult = CtlCommandsV2.readAllData(CtlCommandsV2.scan(-16000, 14000))
-            var needReset = scanResult.startsWith("!|scan:-3")
-            Timber.w("one key scanResult: $scanResult ${needReset}")
+            val scanResult = CtlCommandsV2.readAllData(CtlCommandsV2.scan(SCAN_VELOCITY, SCAN_DURATION_MS))
+            var needReset = scanResult.contains(SCAN_ERROR_NEED_RESET)
+            Timber.w("one key scanResult: $scanResult needReset=$needReset")
 
             waitPollForOneKey("扫描芯片", 30_000L) { result ->
-                if (result.contains("!|scan:-3")) {
-                    needReset = true
-                }
+                if (result.contains(SCAN_ERROR_NEED_RESET)) needReset = true
                 result.contains(CtlConstantsV2.CMD_ACTION_SCAN_STATUS_COMPLETED)
             }
             if (needReset) {
-                // 需要复位
                 val homingResult = CtlCommandsV2.readAllData(CtlCommandsV2.homing())
                 Timber.w("one key homingResult: $homingResult")
                 waitPollForOneKey("片仓复位", 30_000L) { result ->
@@ -1591,18 +1588,20 @@ class SampleSerialViewModel : ViewModel() {
                                 result.contains("s:$key")
                     }
                 }
-                // 吸入
                 val moveToSsResult =
-                    CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, 88888, 10000, 0))
+                    CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, MOTOR_VELOCITY, MOTOR_DURATION_MS, 0))
                 Timber.w("one key moveInResult: $moveToSsResult")
                 waitPollForOneKey("片仓移入", 15_000L) {
                     it.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)
                 }
 
-                // 再扫描一次
-                val rescannedResult = CtlCommandsV2.readAllData(CtlCommandsV2.scan(-16000, 14000))
-                Timber.w("one key scanResult: $rescannedResult ${rescannedResult.startsWith("!|scan:-3")}")
-                waitPollForOneKey("扫描芯片", 30_000L) {
+                val rescannedResult = CtlCommandsV2.readAllData(CtlCommandsV2.scan(SCAN_VELOCITY, SCAN_DURATION_MS))
+                val rescannedNeedsReset = rescannedResult.contains(SCAN_ERROR_NEED_RESET)
+                Timber.w("one key rescanResult: $rescannedResult needReset=$rescannedNeedsReset")
+                if (rescannedNeedsReset) {
+                    throw IOException("复位后扫描仍然报错: $rescannedResult")
+                }
+                waitPollForOneKey("扫描芯片(复位后)", 30_000L) {
                     it.contains(CtlConstantsV2.CMD_ACTION_SCAN_STATUS_COMPLETED)
                 }
             }
@@ -1801,6 +1800,13 @@ class SampleSerialViewModel : ViewModel() {
 
 private const val LASER_POWER_MIN = -100
 private const val LASER_POWER_MAX = 0
+
+private const val SCAN_LD_PWR = -25
+private const val SCAN_VELOCITY = -16000
+private const val SCAN_DURATION_MS = 14000
+private const val MOTOR_VELOCITY = 88888
+private const val MOTOR_DURATION_MS = 10000
+private const val SCAN_ERROR_NEED_RESET = "!|scan:-3"
 
 private fun defaultOneKeyTestSteps(): List<OneKeyTestStep> =
     listOf(

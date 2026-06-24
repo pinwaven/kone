@@ -320,6 +320,7 @@ object CtlCommandsV2 {
         val message = CtlSerialMessageV2()
         message.cmd = CtlConstantsV2.CMD_ACTION_QUERY_DATA
         message.paramData = getParamData()
+        Timber.w("queryData: $message")
         return message
     }
 
@@ -387,27 +388,44 @@ object CtlCommandsV2 {
 
     fun readAllDataByteArray(cmd: CtlSerialMessageV2): ByteArray? {
         val hexMsg = cmd.toHexString()
-        Timber.w("readAllData msg: %s", hexMsg)
+        val maxRetries = 3
+        var lastError: Throwable? = null
 
-        App.getSerialHelper().sendHex(hexMsg)
-
-        val buffer = App.getSerialHelper().readAllData()
-        if (buffer != null) {
-            val receiverBuf: ByteBuf = Unpooled.buffer(buffer.size)
+        for (attempt in 1..maxRetries) {
+            Timber.w("readAllDataByteArray attempt=%d/%d msg=%s", attempt, maxRetries, hexMsg)
             try {
-                receiverBuf.writeBytes(buffer, 0, buffer.size)
-                val resultMsg = CtlSerialMessageV2.fromByteBuf(receiverBuf)
-                if (resultMsg != null) {
-                    val byteDataString = resultMsg.byteData!!.toString(Charsets.UTF_8)
-                    if (byteDataString.startsWith(CtlConstantsV2.RESULT_HAS_DATA_PREFIX)) {
-                        return resultMsg.byteData!!.copyOfRange(2, resultMsg.byteData!!.size)
+                App.getSerialHelper().sendHex(hexMsg)
+                val buffer = App.getSerialHelper().readAllData()
+                if (buffer != null) {
+                    val receiverBuf: ByteBuf = Unpooled.buffer(buffer.size)
+                    try {
+                        receiverBuf.writeBytes(buffer, 0, buffer.size)
+                        val resultMsg = CtlSerialMessageV2.fromByteBuf(receiverBuf)
+                        if (resultMsg != null) {
+                            val byteDataString = resultMsg.byteData!!.toString(Charsets.UTF_8)
+                            if (byteDataString.startsWith(CtlConstantsV2.RESULT_HAS_DATA_PREFIX)) {
+                                if (attempt > 1) {
+                                    Timber.i("readAllDataByteArray succeeded on attempt=%d/%d", attempt, maxRetries)
+                                }
+                                return resultMsg.byteData!!.copyOfRange(2, resultMsg.byteData!!.size)
+                            }
+                        }
+                    } finally {
+                        receiverBuf.release()
                     }
+                } else {
+                    Timber.w("readAllDataByteArray buffer null attempt=%d/%d", attempt, maxRetries)
                 }
-            } finally {
-                // 确保释放资源
-                receiverBuf.release()
+            } catch (t: Throwable) {
+                lastError = t
+                Timber.e(t, "readAllDataByteArray error attempt=%d/%d sendMsgHex=%s", attempt, maxRetries, hexMsg)
+                if (attempt < maxRetries) {
+                    Thread.sleep(200)
+                }
             }
         }
+
+        lastError?.let { throw it }
         return null
     }
 
