@@ -114,6 +114,8 @@ class App : Application() {
                 // 等待供电完成
                 delay(2000)
                 openSerialPort()
+                // power 板上电后第一次请求可能会CRC报错，先poll一次
+                CtlCommandsV2.readAllData(CtlCommandsV2.poll())
 
                 // 物联网连接
                 val configInfo =

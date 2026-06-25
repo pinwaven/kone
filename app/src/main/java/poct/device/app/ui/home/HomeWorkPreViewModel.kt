@@ -114,7 +114,7 @@ class HomeWorkPreViewModel : ViewModel() {
                 // 负弹出，正进入
                 withContext(Dispatchers.IO) {
                     val moveToSsResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
+                        CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
                     Timber.d("moveToSsResult: $moveToSsResult")
 
                     // 等待成功
@@ -123,7 +123,7 @@ class HomeWorkPreViewModel : ViewModel() {
                     progress.value = 95
 
                     val moveDurationResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, 88888, 900))
+                        CtlCommandsV2.readAllData(CtlCommandsV2.closeDoor())
                     Timber.w("moveDurationResult: $moveDurationResult")
 
                     // 等待成功

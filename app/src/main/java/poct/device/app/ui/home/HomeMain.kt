@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
@@ -32,7 +33,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import poct.device.app.App
@@ -92,10 +92,19 @@ fun HomeMain(
 @Composable
 fun HomeMainBody(
     navController: NavController,
-    viewModel: MainMainViewModel
+    viewModel: MainMainViewModel,
+    workPreViewModel: HomeWorkPreViewModel = viewModel()
 ) {
     val user = AppParams.curUser
     Timber.w("===${App.gson.toJson(user)}")
+
+    val ctlBoardResetEvent by AppParams.ctlBoardResetEvent.collectAsState()
+    LaunchedEffect(ctlBoardResetEvent) {
+        if (ctlBoardResetEvent > 0L) {
+            workPreViewModel.onReset()
+            AppParams.ctlBoardResetEvent.value = 0L
+        }
+    }
 
     val images = listOf(
         R.drawable.post_nanovate1,
@@ -155,6 +164,12 @@ fun HomeMainBody(
 
             // 样本检测
             var workPreVisible by remember { mutableStateOf(false) }
+            LaunchedEffect(ctlBoardResetEvent) {
+                if (ctlBoardResetEvent > 0L) {
+                    workPreVisible = false
+                    // event already consumed in outer LaunchedEffect
+                }
+            }
             val venueModeEnabled by AppParams.runtimeModeState.venueModeEnabled.collectAsState()
             val testModeEnabled by AppParams.runtimeModeState.testModeEnabled.collectAsState()
             HomeMainEntry(
@@ -179,6 +194,7 @@ fun HomeMainBody(
             )
             HomeWorkPre(
                 visible = workPreVisible,
+                viewModel = workPreViewModel,
                 onClose = { workPreVisible = false },
                 onOk = {
                     AppParams.runtimeModeState.markHomeVenueDetectionWaitComplete()

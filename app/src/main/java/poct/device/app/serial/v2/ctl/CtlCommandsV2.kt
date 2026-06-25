@@ -152,6 +152,7 @@ object CtlCommandsV2 {
 
     /**
      * 移动到传感器
+     * velocity:
      * ssId：0-向内 1-向外
      */
     fun moveToSs(motorId: Int, velocity: Int, duration: Int, ssId: Int): CtlSerialMessageV2 {
@@ -172,6 +173,18 @@ object CtlCommandsV2 {
             )
         message.paramData = getParamData()
         return message
+    }
+
+    fun moveOut(): CtlSerialMessageV2 {
+        return moveToSs(0, -70000, 11000, 1)
+    }
+
+    fun moveIn(): CtlSerialMessageV2 {
+        return moveToSs(0, 70000, 11000, 0)
+    }
+
+    fun closeDoor(): CtlSerialMessageV2 {
+        return moveDuration(0, 70000, 1000)
     }
 
     fun waitMoveToSsStatusSuccess(): Boolean {

@@ -50,9 +50,16 @@ import androidx.print.PrintHelper
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import org.greenrobot.eventbus.NoSubscriberEvent
 import org.greenrobot.eventbus.Subscribe
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import poct.device.app.event.AppPdfPrintEvent
 import poct.device.app.event.AppScannerEvent
 import poct.device.app.event.AppWifiEvent
+import poct.device.app.serial.v2.ctl.CtlCommandsV2
+import poct.device.app.utils.app.AppSystemUtils
 import poct.device.app.theme.AppFullScreenTheme
 import poct.device.app.theme.primaryColor
 import poct.device.app.ui.aftersale.AfterSaleMain
@@ -100,6 +107,8 @@ import timber.log.Timber
 import java.io.File
 import java.io.IOException
 
+private const val SCREEN_OFF_POWER_DOWN_DELAY_MS = 60L * 60 * 1000 // 1 hour
+
 class MainActivity : ComponentActivity() {
     private val LOCATION_PERMISSION_REQUEST_CODE = 1001
     private val LOCATION_BG_REQUEST_CODE = 1002
@@ -119,6 +128,40 @@ class MainActivity : ComponentActivity() {
 
     // 添加电池接收器助手实例
     private val appBatteryReceiverHelper = AppBatteryReceiverHelper()
+
+    private var screenOffJob: Job? = null
+    @Volatile private var ctlBoardPoweredOff = false
+
+    private val screenReceiver: BroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_SCREEN_OFF -> {
+                    screenOffJob?.cancel()
+                    screenOffJob = lifecycleScope.launch(Dispatchers.IO) {
+                        Timber.w("screen off — ctl board power-down timer started (%dmin)", SCREEN_OFF_POWER_DOWN_DELAY_MS / 60_000)
+                        delay(SCREEN_OFF_POWER_DOWN_DELAY_MS)
+                        Timber.w("screen off timeout — powering down ctl board, clearing initState")
+                        AppSystemUtils.powerOffCtlBoard()
+                        ctlBoardPoweredOff = true
+                        AppParams.initState = false
+                    }
+                }
+                Intent.ACTION_SCREEN_ON -> {
+                    screenOffJob?.cancel()
+                    screenOffJob = null
+                    if (ctlBoardPoweredOff) {
+                        ctlBoardPoweredOff = false
+                        AppParams.ctlBoardResetEvent.value = System.currentTimeMillis()
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            Timber.w("screen on — powering on ctl board")
+                            AppSystemUtils.powerOnCtlBoard()
+                            CtlCommandsV2.readAllData(CtlCommandsV2.poll())
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -143,6 +186,7 @@ class MainActivity : ComponentActivity() {
         AppBatteryReceiverHelper.initBatteryOnAppStart(this)
 
         enableStrategy()
+        registerScreenListener()
     }
 
     override fun onResume() {
@@ -155,13 +199,13 @@ class MainActivity : ComponentActivity() {
         AppParams.resumeStatus = true
         // 每次回到Activity时重新隐藏系统栏
         hideSystemBars()
+    }
 
-        // 重新注册电池广播接收器
-        val batteryFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-        applicationContext.registerReceiver(
-            appBatteryReceiverHelper.batteryStateReceiver,
-            batteryFilter
-        )
+    override fun onPause() {
+        super.onPause()
+        try { applicationContext.unregisterReceiver(wifiStateReceiver) } catch (e: IllegalArgumentException) { }
+        try { applicationContext.unregisterReceiver(appBatteryReceiverHelper.batteryStateReceiver) } catch (e: IllegalArgumentException) { }
+        try { applicationContext.unregisterReceiver(bluetoothReceiver) } catch (e: IllegalArgumentException) { }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
@@ -178,16 +222,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-
-//        applicationContext.unregisterReceiver(wifiStateReceiver)
-        // 修改：使用batteryReceiverHelper的接收器
-        try {
-            applicationContext.unregisterReceiver(appBatteryReceiverHelper.batteryStateReceiver)
-        } catch (e: IllegalArgumentException) {
-            // 可能已经注销
-        }
-
-        applicationContext.unregisterReceiver(bluetoothReceiver)
+        try { applicationContext.unregisterReceiver(screenReceiver) } catch (e: IllegalArgumentException) { }
+        screenOffJob?.cancel()
         AppEventUtils.unregister(this)
     }
 
@@ -447,6 +483,14 @@ class MainActivity : ComponentActivity() {
         applicationContext.registerReceiver(bluetoothReceiver, intentFilter) //注册广播接收器
     }
 
+    private fun registerScreenListener() {
+        val intentFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+        }
+        applicationContext.registerReceiver(screenReceiver, intentFilter)
+    }
+
     private val bluetoothReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             AppEventUtils.publishEvent(AppScannerEvent(context, intent))
@@ -461,36 +505,24 @@ class MainActivity : ComponentActivity() {
             TRIM_MEMORY_RUNNING_MODERATE,
             TRIM_MEMORY_RUNNING_LOW,
             TRIM_MEMORY_RUNNING_CRITICAL -> {
-                // 释放非必要资源
                 clearCache()
-                releaseUnusedResources()
             }
 
             TRIM_MEMORY_BACKGROUND,
             TRIM_MEMORY_MODERATE,
             TRIM_MEMORY_COMPLETE -> {
-                // 系统内存紧张，主动清理
                 memoryCache.evictAll()
-                System.gc()
             }
         }
     }
 
     override fun onLowMemory() {
         super.onLowMemory()
-        // 紧急内存释放
         memoryCache.evictAll()
-        System.gc()
     }
 
     private fun clearCache() {
-        // 清理缓存
         memoryCache.evictAll()
-    }
-
-    private fun releaseUnusedResources() {
-        // 释放未使用的资源
-        viewModelStore.clear()
     }
 }
 

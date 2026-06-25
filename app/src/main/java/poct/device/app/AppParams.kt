@@ -2,6 +2,7 @@ package poct.device.app
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import kotlinx.coroutines.flow.MutableStateFlow
 import poct.device.app.bean.CardConfigBean
 import poct.device.app.bean.CaseBean
 import poct.device.app.bean.PrinterInfo
@@ -28,6 +29,11 @@ object AppParams {
      * 初始化状态
      */
     var initState = false
+
+    /**
+     * 控制板断电恢复信号 — 值变化时首页重置到初始状态
+     */
+    val ctlBoardResetEvent = MutableStateFlow(0L)
 
     var battery: Int = 0
     var batteryPlugged: Boolean = false

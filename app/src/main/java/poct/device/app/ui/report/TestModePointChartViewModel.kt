@@ -47,12 +47,12 @@ class TestModePointChartViewModel : ViewModel() {
                 Timber.w("testMode chart home cancelResult: $cancelResult")
 
                 val moveToSsResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
+                        CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
                 Timber.w("testMode chart home moveToSsResult: $moveToSsResult")
                 CtlCommandsV2.waitMoveToSsStatusSuccess()
 
                 val moveDurationResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, 88888, 900))
+                        CtlCommandsV2.readAllData(CtlCommandsV2.closeDoor())
                 Timber.w("testMode chart home moveDurationResult: $moveDurationResult")
                 CtlCommandsV2.waitMoveDurationStatusSuccess()
 

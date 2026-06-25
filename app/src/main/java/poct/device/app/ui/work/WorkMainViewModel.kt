@@ -167,15 +167,17 @@ class WorkMainViewModel : ViewModel() {
     private var jobQuery: Job? = null
 
     fun onLoad() {
+        CtlCommandsV2.isWaitScanStatusSuccessCancel = false
+        CtlCommandsV2.isWaitAbsorbStatusSuccessCancel = false
         onReset()
 
         viewModelScope.launch {
             viewState.value = ViewState.LoadingOver()
 
             withContext(Dispatchers.IO) {
-                val moveDurationResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, -88888, 900))
-                Timber.w("moveDurationResult: $moveDurationResult")
+                val moveOutResult =
+                    CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
+                Timber.w("moveOutResult: $moveOutResult")
 
                 // 等待成功
                 CtlCommandsV2.waitMoveDurationStatusSuccess()
@@ -266,6 +268,17 @@ class WorkMainViewModel : ViewModel() {
         actionState.value = ActionState(event = EVT_EXIT)
     }
 
+    // 控制板断电强制退出 — 中断轮询，重置状态，调用方负责导航
+    // cancel 标志在下次 onLoad() 时恢复为 false
+    fun onCtlBoardReset() {
+        CtlCommandsV2.isWaitScanStatusSuccessCancel = true
+        CtlCommandsV2.isWaitAbsorbStatusSuccessCancel = true
+        continueSacn.value = false
+        actionState.value = ActionState.Default
+        viewState.value = ViewState.Default
+        onReset()
+    }
+
     /** 第一步：开始页(信息录入) 1、读取扫码配置、判断是否手动设置项目； 2、是，进入手动设置项目页; 3、否，移出片仓; */
     fun onActionStartNext() {
         viewState.value = ViewState.LoadingOver()
@@ -284,7 +297,7 @@ class WorkMainViewModel : ViewModel() {
 
             withContext(Dispatchers.IO) {
                 val moveToSsResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
+                        CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
                 Timber.w("moveToSsResult: $moveToSsResult")
 
                 // 等待成功
@@ -295,7 +308,12 @@ class WorkMainViewModel : ViewModel() {
         }
     }
 
-    /** 第二步、手动配置项目下一步，移出片仓， 上一步开始页 回到上一步 */
+    /**
+     * 第二步、手动配置项目
+     * 下一步，移出片仓，
+     * 上一步开始页
+     * 回到上一步
+     **/
     fun onActionCaseInputPre() {
         if (step.value != STEP_START && step.value != STEP_CASE) {
             viewState.value = ViewState.LoadingOver()
@@ -308,7 +326,7 @@ class WorkMainViewModel : ViewModel() {
 
                 withContext(Dispatchers.IO) {
                     val moveToSsResult =
-                            CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
+                            CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
                     Timber.w("moveToSsResult: $moveToSsResult")
 
                     // 等待成功
@@ -320,7 +338,7 @@ class WorkMainViewModel : ViewModel() {
                                             action.value == ACTION_WORK)
                     ) {
                         val moveDurationResult =
-                                CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, 88888, 900))
+                                CtlCommandsV2.readAllData(CtlCommandsV2.closeDoor())
                         Timber.w("moveDurationResult: $moveDurationResult")
 
                         // 等待成功
@@ -418,7 +436,7 @@ class WorkMainViewModel : ViewModel() {
                             withContext(Dispatchers.IO) {
                                 val moveToSsResult =
                                         CtlCommandsV2.readAllData(
-                                                CtlCommandsV2.moveToSs(0, 88888, 10000, 0)
+                                                CtlCommandsV2.moveIn()
                                         )
                                 Timber.d("moveToSsResult: $moveToSsResult")
 
@@ -466,7 +484,7 @@ class WorkMainViewModel : ViewModel() {
                             withContext(Dispatchers.IO) {
                                 val moveToSsResult =
                                         CtlCommandsV2.readAllData(
-                                                CtlCommandsV2.moveToSs(0, 88888, 10000, 0)
+                                                CtlCommandsV2.moveIn()
                                         )
                                 Timber.d("moveToSsResult: $moveToSsResult")
 
@@ -943,7 +961,7 @@ class WorkMainViewModel : ViewModel() {
                     withContext(Dispatchers.IO) {
                         val moveToSsResult =
                                 CtlCommandsV2.readAllData(
-                                        CtlCommandsV2.moveToSs(0, 88888, 10000, 0)
+                                        CtlCommandsV2.moveIn()
                                 )
                         Timber.d("moveToSsResult: $moveToSsResult")
 
@@ -1090,7 +1108,7 @@ class WorkMainViewModel : ViewModel() {
 
             withContext(Dispatchers.IO) {
                 val moveToSsResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
+                        CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
                 Timber.w("moveToSsResult: $moveToSsResult")
 
                 // 等待成功
@@ -1102,7 +1120,7 @@ class WorkMainViewModel : ViewModel() {
                                         action.value == ACTION_WORK)
                 ) {
                     val moveDurationResult =
-                            CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, 88888, 900))
+                            CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, 70000, 900))
                     Timber.w("moveDurationResult: $moveDurationResult")
 
                     // 等待成功
@@ -1116,7 +1134,7 @@ class WorkMainViewModel : ViewModel() {
             progress.value = 100F
 
             //        val moveDurationResult =
-            //            CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, -88888, 5000))
+            //            CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, -70000, 5000))
             //        Timber.w("moveDurationResult: $moveDurationResult")
 
             //        // 等待成功
@@ -1166,7 +1184,7 @@ class WorkMainViewModel : ViewModel() {
         list.add(
                 WorkFlowActionV2(
                         type = WorkFlowActionV2.TYPE_SERIAL,
-                        cmd = CtlCommandsV2.moveToSs(0, -88888, 10000, 1),
+                        cmd = CtlCommandsV2.moveOut(),
                         time = -2,
                         step = STEP_WORK,
                         action = ACTION_WORK
@@ -1229,7 +1247,7 @@ class WorkMainViewModel : ViewModel() {
         list.add(
                 WorkFlowActionV2(
                         type = WorkFlowActionV2.TYPE_SERIAL,
-                        cmd = CtlCommandsV2.moveToSs(0, -88888, 10000, 1),
+                        cmd = CtlCommandsV2.moveOut(),
                         time = -2,
                         step = STEP_WORK,
                         action = ACTION_WORK
@@ -2351,14 +2369,14 @@ class WorkMainViewModel : ViewModel() {
                     onActionWorkOutDoneHomingSuccess(callback)
                 } else {
                     val moveToSsResult =
-                            CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
+                            CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
                     Timber.w("moveToSsResult: $moveToSsResult")
 
                     // 等待成功
                     CtlCommandsV2.waitMoveToSsStatusSuccess()
 
                     val moveDurationResult =
-                            CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, 88888, 900))
+                            CtlCommandsV2.readAllData(CtlCommandsV2.closeDoor())
                     Timber.w("moveDurationResult: $moveDurationResult")
 
                     // 等待成功
@@ -2638,14 +2656,14 @@ class WorkMainViewModel : ViewModel() {
             } else {
                 withContext(Dispatchers.IO) {
                     val moveToSsResult =
-                            CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -88888, 10000, 1))
+                            CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
                     Timber.w("moveToSsResult: $moveToSsResult")
 
                     // 等待成功
                     CtlCommandsV2.waitMoveToSsStatusSuccess()
 
                     val moveDurationResult =
-                            CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, 88888, 900))
+                            CtlCommandsV2.readAllData(CtlCommandsV2.closeDoor())
                     Timber.w("moveDurationResult: $moveDurationResult")
 
                     // 等待成功

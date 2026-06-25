@@ -949,7 +949,7 @@ class SampleSerialViewModel : ViewModel() {
             text.value = ("片仓移入中。。。")
             withContext(Dispatchers.IO) {
                 val moveToSsResult =
-                    CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, MOTOR_VELOCITY, MOTOR_DURATION_MS, 0))
+                    CtlCommandsV2.readAllData(CtlCommandsV2.moveIn())
                 Timber.d("moveToSsResult: $moveToSsResult")
 
                 // 等待成功
@@ -964,7 +964,7 @@ class SampleSerialViewModel : ViewModel() {
             text.value = ("片仓移出中。。。")
             withContext(Dispatchers.IO) {
                 val moveToSsResult =
-                    CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -MOTOR_VELOCITY, MOTOR_DURATION_MS, 1))
+                    CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
                 Timber.d("moveToSsResult: $moveToSsResult")
 
                 // 等待成功
@@ -1112,26 +1112,21 @@ class SampleSerialViewModel : ViewModel() {
 
     fun readData() {
         viewModelScope.launch {
-            text.value = ("读取成功，写入中。。。")
-
-            val path = withContext(Dispatchers.IO) {
-                val queryResult = CtlCommandsV2.readAllDataByteArray(CtlCommandsV2.queryData())
-
-                val file = File(App.getContext().externalCacheDir, "data.bin")
-                if (!file.parentFile?.exists()!!) {
+            try {
+                text.value = "读取中..."
+                val path = withContext(Dispatchers.IO) {
+                    val queryResult = CtlCommandsV2.readAllDataByteArray(CtlCommandsV2.queryData())
+                        ?: throw IOException("读取扫描bin失败")
+                    if (queryResult.isEmpty()) throw IOException("读取扫描bin为空")
+                    val file = File(App.getContext().externalCacheDir, "data.bin")
                     file.parentFile?.mkdirs()
+                    file.writeBytes(queryResult)
+                    file.path
                 }
-                if (file.exists()) {
-                    file.delete()
-                }
-                FileOutputStream(file).use { outputStream ->
-                    outputStream.write(queryResult)
-                }
-                file.path
+                text.value = "写入 success $path"
+            } catch (e: Exception) {
+                text.value = "读取失败: ${e.message}"
             }
-
-            text.value =
-                ("写入 success $path")
         }
     }
 
@@ -1159,7 +1154,7 @@ class SampleSerialViewModel : ViewModel() {
             } else {
                 withContext(Dispatchers.IO) {
                     val moveToSsResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -MOTOR_VELOCITY, MOTOR_DURATION_MS, 1))
+                        CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
                     Timber.w("moveToSsResult: $moveToSsResult")
 
                     // 等待成功
@@ -1226,6 +1221,7 @@ class SampleSerialViewModel : ViewModel() {
     fun powerOn() {
         AppSystemUtils.powerOnCtlBoard()
         text.value = ("开启供电 success")
+        CtlCommandsV2.readAllData(CtlCommandsV2.poll())
     }
 
     fun quickScan() {
@@ -1501,7 +1497,7 @@ class SampleSerialViewModel : ViewModel() {
                 }
             }
             val moveToSsResult =
-                CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -80000, 10000, 1))
+                CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
             Timber.w("one key reset moveToSsResult: $moveToSsResult")
             waitPollForOneKey("片仓复位移出", 15_000L) {
                 it.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)
@@ -1510,7 +1506,7 @@ class SampleSerialViewModel : ViewModel() {
     }
 
     private fun moveFrontForScrewTest() {
-        val result = CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -80000, 10000, 1))
+        val result = CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
         Timber.w("screw front result: $result")
         waitPollForScrewTest("移出", 15_000L) {
             it.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)
@@ -1518,7 +1514,7 @@ class SampleSerialViewModel : ViewModel() {
     }
 
     private fun moveBackForScrewTest() {
-        val result = CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, 80000, 10000, 0))
+        val result = CtlCommandsV2.readAllData(CtlCommandsV2.moveIn())
         Timber.w("screw back result: $result")
         waitPollForScrewTest("移入", 15_000L) {
             it.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)
@@ -1536,7 +1532,7 @@ class SampleSerialViewModel : ViewModel() {
     private suspend fun ejectCaseForOneKeyChart() {
         withContext(Dispatchers.IO) {
             val moveToSsResult =
-                CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, -MOTOR_VELOCITY, MOTOR_DURATION_MS, 1))
+                CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
             Timber.w("one key chart eject moveToSsResult: $moveToSsResult")
             waitPollForOneKey("片仓弹出", 15_000L) {
                 it.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)
@@ -1547,7 +1543,7 @@ class SampleSerialViewModel : ViewModel() {
     private suspend fun moveInForOneKey() {
         withContext(Dispatchers.IO) {
             val moveToSsResult =
-                CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, MOTOR_VELOCITY, MOTOR_DURATION_MS, 0))
+                CtlCommandsV2.readAllData(CtlCommandsV2.moveIn())
             Timber.w("one key moveInResult: $moveToSsResult")
             waitPollForOneKey("片仓移入", 15_000L) {
                 it.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)
@@ -1589,7 +1585,7 @@ class SampleSerialViewModel : ViewModel() {
                     }
                 }
                 val moveToSsResult =
-                    CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(0, MOTOR_VELOCITY, MOTOR_DURATION_MS, 0))
+                    CtlCommandsV2.readAllData(CtlCommandsV2.moveIn())
                 Timber.w("one key moveInResult: $moveToSsResult")
                 waitPollForOneKey("片仓移入", 15_000L) {
                     it.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)

@@ -109,6 +109,7 @@ object AppSystemUtils {
         // setGpio(7, 1)
 
         setGpio(23, 1) // 9v
+        Thread.sleep(100)
         setGpio(6, 1) // 5v
         setGpio(17, 1) // 3v3
         setGpio(18, 1)

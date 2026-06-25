@@ -92,6 +92,17 @@ fun WorkMain(navController: NavController, viewModel: WorkMainViewModel = viewMo
         }
     }
 
+    val ctlBoardResetEvent by AppParams.ctlBoardResetEvent.collectAsState()
+    LaunchedEffect(ctlBoardResetEvent) {
+        if (ctlBoardResetEvent > 0L) {
+            AppParams.ctlBoardResetEvent.value = 0L
+            viewModel.onCtlBoardReset()
+            navController.navigate(RouteConfig.HOME_MAIN) {
+                popUpTo(RouteConfig.HOME_MAIN) { inclusive = false }
+            }
+        }
+    }
+
     LaunchedEffect(viewState) {
         if (viewState.value == ViewState.Default) {
             viewModel.onLoad()
