@@ -647,23 +647,27 @@ private fun OneKeyChartDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (qrCode.isNotBlank()) {
-                            if (uploadState is OneKeyUploadState.Failure) {
+                            if (uploadState is OneKeyUploadState.Success) {
                                 Text(
                                     fontSize = 11.sp,
-                                    color = Color(0xFFC62828),
-                                    text = uploadState.message,
+                                    color = Color(0xFF2E7D32),
+                                    text = "上传成功",
+                                )
+                            } else {
+                                if (uploadState is OneKeyUploadState.Failure) {
+                                    Text(
+                                        fontSize = 11.sp,
+                                        color = Color(0xFFC62828),
+                                        text = uploadState.message,
+                                    )
+                                }
+                                FactoryTestButton(
+                                    modifier = Modifier.width(130.dp),
+                                    text = if (uploadState is OneKeyUploadState.Loading) "上传中..." else "上传检测结果",
+                                    onClick = onUpload,
+                                    enabled = uploadState !is OneKeyUploadState.Loading,
                                 )
                             }
-                            FactoryTestButton(
-                                modifier = Modifier.width(130.dp),
-                                text = when (uploadState) {
-                                    is OneKeyUploadState.Loading -> "上传中..."
-                                    is OneKeyUploadState.Success -> "上传成功"
-                                    else -> "上传检测结果"
-                                },
-                                onClick = onUpload,
-                                enabled = uploadState !is OneKeyUploadState.Loading && uploadState !is OneKeyUploadState.Success,
-                            )
                         }
                         FactoryTestButton(
                             modifier = Modifier.width(90.dp),

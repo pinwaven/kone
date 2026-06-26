@@ -218,10 +218,12 @@ class MainActivity : ComponentActivity() {
         try { applicationContext.unregisterReceiver(bluetoothReceiver) } catch (e: IllegalArgumentException) { }
     }
 
-    override fun onUserInteraction() {
-        super.onUserInteraction()
-        setScreenBrightness(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE)
-        resetIdleTimer()
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent?): Boolean {
+        if (ev?.action == android.view.MotionEvent.ACTION_DOWN) {
+            setScreenBrightness(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE)
+            resetIdleTimer()
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     private fun setScreenBrightness(brightness: Float) {
