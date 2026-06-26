@@ -149,6 +149,11 @@ class App : Application() {
         Timber.w("hiResult: $hiResult")
     }
 
+    fun closeSerialPort() {
+        serialHelper?.close()
+        Timber.w("serial port closed")
+    }
+
     private class CrashReportingTree : Timber.Tree() {
         override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {}
     }

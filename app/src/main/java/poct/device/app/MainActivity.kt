@@ -107,7 +107,9 @@ import timber.log.Timber
 import java.io.File
 import java.io.IOException
 
-private const val SCREEN_OFF_POWER_DOWN_DELAY_MS = 60L * 60 * 1000 // 1 hour
+private const val SCREEN_OFF_POWER_DOWN_DELAY_MS = 30L * 60 * 1000 // 30 minutes
+private const val SCREEN_DIM_IDLE_MS = 5L * 60 * 1000 // 5 minutes
+private const val SCREEN_BRIGHTNESS_DIM = 0.02f
 
 class MainActivity : ComponentActivity() {
     private val LOCATION_PERMISSION_REQUEST_CODE = 1001
@@ -130,6 +132,7 @@ class MainActivity : ComponentActivity() {
     private val appBatteryReceiverHelper = AppBatteryReceiverHelper()
 
     private var screenOffJob: Job? = null
+    private var idleJob: Job? = null
     @Volatile private var ctlBoardPoweredOff = false
 
     private val screenReceiver: BroadcastReceiver = object : BroadcastReceiver() {
@@ -140,8 +143,9 @@ class MainActivity : ComponentActivity() {
                     screenOffJob = lifecycleScope.launch(Dispatchers.IO) {
                         Timber.w("screen off — ctl board power-down timer started (%dmin)", SCREEN_OFF_POWER_DOWN_DELAY_MS / 60_000)
                         delay(SCREEN_OFF_POWER_DOWN_DELAY_MS)
-                        Timber.w("screen off timeout — powering down ctl board, clearing initState")
+                        Timber.w("screen off timeout — powering down ctl board, closing serial port")
                         AppSystemUtils.powerOffCtlBoard()
+                        App.getContext().closeSerialPort()
                         ctlBoardPoweredOff = true
                         AppParams.initState = false
                     }
@@ -149,12 +153,16 @@ class MainActivity : ComponentActivity() {
                 Intent.ACTION_SCREEN_ON -> {
                     screenOffJob?.cancel()
                     screenOffJob = null
+                    setScreenBrightness(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE)
+                    resetIdleTimer()
                     if (ctlBoardPoweredOff) {
                         ctlBoardPoweredOff = false
                         AppParams.ctlBoardResetEvent.value = System.currentTimeMillis()
                         lifecycleScope.launch(Dispatchers.IO) {
-                            Timber.w("screen on — powering on ctl board")
+                            Timber.w("screen on — powering on ctl board, reopening serial port")
                             AppSystemUtils.powerOnCtlBoard()
+                            App.getContext().openSerialPort()
+                            // power 板上电后第一次请求可能会CRC报错，先poll一次
                             CtlCommandsV2.readAllData(CtlCommandsV2.poll())
                         }
                     }
@@ -199,13 +207,35 @@ class MainActivity : ComponentActivity() {
         AppParams.resumeStatus = true
         // 每次回到Activity时重新隐藏系统栏
         hideSystemBars()
+        resetIdleTimer()
     }
 
     override fun onPause() {
         super.onPause()
+        idleJob?.cancel()
         try { applicationContext.unregisterReceiver(wifiStateReceiver) } catch (e: IllegalArgumentException) { }
         try { applicationContext.unregisterReceiver(appBatteryReceiverHelper.batteryStateReceiver) } catch (e: IllegalArgumentException) { }
         try { applicationContext.unregisterReceiver(bluetoothReceiver) } catch (e: IllegalArgumentException) { }
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        setScreenBrightness(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE)
+        resetIdleTimer()
+    }
+
+    private fun setScreenBrightness(brightness: Float) {
+        val lp = window.attributes
+        lp.screenBrightness = brightness
+        window.attributes = lp
+    }
+
+    private fun resetIdleTimer() {
+        idleJob?.cancel()
+        idleJob = lifecycleScope.launch {
+            delay(SCREEN_DIM_IDLE_MS)
+            setScreenBrightness(SCREEN_BRIGHTNESS_DIM)
+        }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
@@ -224,6 +254,7 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
         try { applicationContext.unregisterReceiver(screenReceiver) } catch (e: IllegalArgumentException) { }
         screenOffJob?.cancel()
+        idleJob?.cancel()
         AppEventUtils.unregister(this)
     }
 
