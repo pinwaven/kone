@@ -26,6 +26,8 @@ object NanoEndpoints {
 
     fun tokenExchange(baseUrl: String): String = "${base(baseUrl)}/kino/token/exchange"
 
+    fun kinoCurve(baseUrl: String): String = "${base(baseUrl)}/kino/kino-curve"
+
     private fun base(baseUrl: String): String = baseUrl.trimEnd('/')
 }
 

@@ -3,10 +3,13 @@ package poct.device.app.thirdparty
 import com.google.gson.JsonParseException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
 import poct.device.app.App
 import poct.device.app.AppParams
 import poct.device.app.BuildConfig
@@ -37,6 +40,7 @@ import poct.device.app.thirdparty.model.nano.NanoRawResponse
 import timber.log.Timber
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import com.google.gson.JsonObject
 
 /**
  * Thin client for the Waven Nano AI backend (Aliyun FC 3.0).
@@ -567,6 +571,81 @@ object NanoApi {
         } catch (e: Exception) {
             Timber.w(e, "NanoApi.checkUpgrade failed")
             null
+        }
+    }
+
+    data class CurveUploadResult(
+        val ok: Boolean,
+        val id: Int? = null,
+        val message: String = "",
+        val status: Int? = null,
+        val error: String? = null,
+    )
+
+    suspend fun uploadCurve(
+        qrcode: String,
+        referenceValues: String,
+        curveFile: File,
+    ): CurveUploadResult = withContext(Dispatchers.IO) {
+        val base = baseUrl()
+        if (base.isEmpty()) return@withContext CurveUploadResult(ok = false, message = "nanoBaseUrl not configured")
+        if (!curveFile.exists()) return@withContext CurveUploadResult(ok = false, message = "curve file not found")
+
+        val url = NanoEndpoints.kinoCurve(base)
+        val authState = NanoAuthStore.load()
+        var commToken = authState.commToken.trim()
+        if (commToken.isEmpty()) return@withContext CurveUploadResult(ok = false, message = "missing_comm_token, please activate")
+
+        fun buildMultipart(): okhttp3.RequestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("qrcode", qrcode)
+            .addFormDataPart("reference_values", referenceValues)
+            .addFormDataPart("curve_file", curveFile.name, curveFile.asRequestBody("application/octet-stream".toMediaType()))
+            .build()
+
+        fun execute(token: String): NanoRawResponse {
+            val request = Request.Builder()
+                .url(url)
+                .withAuth(token)
+                .post(buildMultipart())
+                .build()
+            authClient.newCall(request).execute().use { resp ->
+                return NanoRawResponse(status = resp.code, body = resp.body?.string().orEmpty())
+            }
+        }
+
+        fun NanoRawResponse.errorField(): String? = runCatching {
+            App.gson.fromJson(body, JsonObject::class.java)?.get("error")?.takeIf { !it.isJsonNull }?.asString
+        }.getOrNull()
+
+        fun NanoRawResponse.successId(): Int? = runCatching {
+            App.gson.fromJson(body, JsonObject::class.java)?.get("id")?.takeIf { !it.isJsonNull }?.asInt
+        }.getOrNull()
+
+        try {
+            var resp = execute(commToken)
+            if (resp.status == 401 && resp.errorField() == "comm_token_expired") {
+                val rootToken = authState.rootToken.trim()
+                if (rootToken.isEmpty()) return@withContext CurveUploadResult(ok = false, status = resp.status, message = "comm_token_expired and root token missing, please activate")
+                val exchangeResp = executeNanoRequest(NanoProtectedRequest.post(NanoEndpoints.tokenExchange(base), "{}"), rootToken)
+                if (exchangeResp.status !in 200..299) return@withContext CurveUploadResult(ok = false, status = exchangeResp.status, message = "token exchange failed")
+                val exchanged = runCatching { App.gson.fromJson(exchangeResp.body, poct.device.app.thirdparty.model.nano.NanoTokenExchangeResp::class.java) }.getOrNull()
+                    ?: return@withContext CurveUploadResult(ok = false, message = "token exchange parse failed")
+                commToken = exchanged.commToken.orEmpty().trim()
+                if (commToken.isEmpty()) return@withContext CurveUploadResult(ok = false, message = "token exchange returned empty token")
+                NanoAuthStore.save(authState.copy(commToken = commToken, commTokenExpiresAt = exchanged.commTokenExpiresAt.orEmpty()))
+                resp = execute(commToken)
+            }
+            if (resp.status in 200..299) {
+                CurveUploadResult(ok = true, id = resp.successId(), status = resp.status)
+            } else if (resp.status == 401 && resp.errorField() == "invalid_comm_token") {
+                CurveUploadResult(ok = false, status = resp.status, error = resp.errorField(), message = "invalid_comm_token, please activate")
+            } else {
+                CurveUploadResult(ok = false, status = resp.status, error = resp.errorField(), message = "kino-curve failed: HTTP ${resp.status}")
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "NanoApi.uploadCurve failed")
+            CurveUploadResult(ok = false, message = e.message ?: "unknown error")
         }
     }
 }

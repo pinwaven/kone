@@ -113,6 +113,8 @@ fun SampleSerial(
     val oneKeyMessage by viewModel.oneKeyTestMessage.collectAsState()
     val oneKeyChartVisible by viewModel.oneKeyTestChartVisible.collectAsState()
     val oneKeySlopeRegions by viewModel.oneKeyTestSlopeRegions.collectAsState()
+    val oneKeyQrCode by viewModel.oneKeyQrCode.collectAsState()
+    val oneKeyUploadState by viewModel.oneKeyUploadState.collectAsState()
     val screwTestRunning by viewModel.screwTestRunning.collectAsState()
     val screwTestMessage by viewModel.screwTestMessage.collectAsState()
     var laserDialogVisible by remember { mutableStateOf(false) }
@@ -281,6 +283,7 @@ fun SampleSerial(
         running = oneKeyRunning,
         awaitingConfirm = oneKeyAwaitingConfirm,
         message = oneKeyMessage,
+        qrCode = oneKeyQrCode,
         onConfirmChipInserted = { viewModel.confirmChipInserted() },
         onDismiss = {
             oneKeyDialogVisible = false
@@ -291,6 +294,9 @@ fun SampleSerial(
         visible = oneKeyChartVisible,
         slopeRegions = oneKeySlopeRegions,
         chartModelProducer = viewModel.oneKeyChartModelProducer,
+        qrCode = oneKeyQrCode,
+        uploadState = oneKeyUploadState,
+        onUpload = { viewModel.uploadCurve() },
         onDismiss = { viewModel.dismissOneKeyChart() }
     )
 }
@@ -301,6 +307,7 @@ private fun FactoryTestButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     containerColor: Color = filledFontColor,
+    enabled: Boolean = true,
 ) {
     AppFilledButton(
         modifier = modifier
@@ -313,7 +320,8 @@ private fun FactoryTestButton(
         textColor = Color.White,
         fontSize = 13.sp,
         text = text,
-        onClick = onClick
+        onClick = onClick,
+        enabled = enabled,
     )
 }
 
@@ -505,6 +513,7 @@ private fun OneKeyTestDialog(
     running: Boolean,
     awaitingConfirm: Boolean,
     message: String,
+    qrCode: String,
     onConfirmChipInserted: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -554,6 +563,14 @@ private fun OneKeyTestDialog(
                                 text = message
                             )
                         }
+                        if (qrCode.isNotBlank()) {
+                            Text(
+                                modifier = Modifier.fillMaxWidth(),
+                                fontSize = 12.sp,
+                                color = fontColor,
+                                text = "二维码：$qrCode"
+                            )
+                        }
                         Spacer(modifier = Modifier.weight(1f))
                         if (awaitingConfirm) {
                             FactoryTestButton(
@@ -579,6 +596,9 @@ private fun OneKeyChartDialog(
     visible: Boolean,
     slopeRegions: List<TestModeSlopeRegion>,
     chartModelProducer: ChartEntryModelProducer,
+    qrCode: String,
+    uploadState: OneKeyUploadState,
+    onUpload: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     if (!visible) {
@@ -622,11 +642,35 @@ private fun OneKeyChartDialog(
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    FactoryTestButton(
-                        modifier = Modifier.width(90.dp),
-                        text = "关闭",
-                        onClick = onDismiss
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (qrCode.isNotBlank()) {
+                            if (uploadState is OneKeyUploadState.Failure) {
+                                Text(
+                                    fontSize = 11.sp,
+                                    color = Color(0xFFC62828),
+                                    text = uploadState.message,
+                                )
+                            }
+                            FactoryTestButton(
+                                modifier = Modifier.width(130.dp),
+                                text = when (uploadState) {
+                                    is OneKeyUploadState.Loading -> "上传中..."
+                                    is OneKeyUploadState.Success -> "上传成功"
+                                    else -> "上传检测结果"
+                                },
+                                onClick = onUpload,
+                                enabled = uploadState !is OneKeyUploadState.Loading && uploadState !is OneKeyUploadState.Success,
+                            )
+                        }
+                        FactoryTestButton(
+                            modifier = Modifier.width(90.dp),
+                            text = "关闭",
+                            onClick = onDismiss
+                        )
+                    }
                 }
                 Box(
                     modifier = Modifier
@@ -815,6 +859,13 @@ data class OneKeyTestStep(
     val status: OneKeyStepStatus = OneKeyStepStatus.Pending,
 )
 
+sealed class OneKeyUploadState {
+    object Idle : OneKeyUploadState()
+    object Loading : OneKeyUploadState()
+    data class Success(val id: Int?) : OneKeyUploadState()
+    data class Failure(val message: String) : OneKeyUploadState()
+}
+
 class SampleSerialViewModel : ViewModel() {
     val text = MutableStateFlow("")
     val laserPower = MutableStateFlow("-100")
@@ -824,6 +875,9 @@ class SampleSerialViewModel : ViewModel() {
     val oneKeyTestMessage = MutableStateFlow("")
     val oneKeyTestChartVisible = MutableStateFlow(false)
     val oneKeyTestSlopeRegions = MutableStateFlow<List<TestModeSlopeRegion>>(emptyList())
+    val oneKeyQrCode = MutableStateFlow("")
+    val oneKeyUploadState = MutableStateFlow<OneKeyUploadState>(OneKeyUploadState.Idle)
+    val referenceValuesCache: MutableMap<String, String> = mutableMapOf()
     val oneKeyChartModelProducer = ChartEntryModelProducer()
     val screwTestRunning = MutableStateFlow(false)
     val screwTestMessage = MutableStateFlow("")
@@ -1277,6 +1331,8 @@ class SampleSerialViewModel : ViewModel() {
         oneKeyTestMessage.value = "开始一键测试"
         oneKeyTestChartVisible.value = false
         oneKeyTestSlopeRegions.value = emptyList()
+        oneKeyQrCode.value = ""
+        oneKeyUploadState.value = OneKeyUploadState.Idle
         oneKeyTestRunning.value = true
         oneKeyTestAwaitingConfirm.value = false
 
@@ -1288,15 +1344,16 @@ class SampleSerialViewModel : ViewModel() {
                         resetCaseForOneKey()
                     }
                     waitChipInsertedStep()
-                    runOneKeyStep(2) { moveInForOneKey() }
-                    runOneKeyStep(3) { absorbForOneKey(milliseconds = 10 * 1000) }
-                    runOneKeyStep(4) {
+                    runOneKeyStep(2) { scanQrForOneKey() }
+                    runOneKeyStep(3) { moveInForOneKey() }
+                    runOneKeyStep(4) { absorbForOneKey(milliseconds = 10 * 1000) }
+                    runOneKeyStep(5) {
                         val points = scanAndReadPointsForOneKey()
                         val chartData = buildOneKeyChartData(points)
                         oneKeyTestSlopeRegions.value = chartData.slopeRegions
                         oneKeyChartModelProducer.setEntries(chartData.entrySets)
                     }
-                    runOneKeyStep(5) {
+                    runOneKeyStep(6) {
                         oneKeyTestChartVisible.value = true
                         oneKeyTestMessage.value = "扫描结果图已显示，片仓弹出中..."
                         ejectCaseForOneKeyChart()
@@ -1324,6 +1381,27 @@ class SampleSerialViewModel : ViewModel() {
 
     fun dismissOneKeyChart() {
         oneKeyTestChartVisible.value = false
+        oneKeyQrCode.value = ""
+        oneKeyUploadState.value = OneKeyUploadState.Idle
+    }
+
+    fun uploadCurve() {
+        val qr = oneKeyQrCode.value
+        if (qr.isEmpty()) return
+        if (oneKeyUploadState.value is OneKeyUploadState.Loading) return
+        oneKeyUploadState.value = OneKeyUploadState.Loading
+        viewModelScope.launch {
+            val refValues = referenceValuesCache[qr] ?: "{}"
+            val curveFile = java.io.File(App.getContext().externalCacheDir, "data.bin")
+            val result = withContext(Dispatchers.IO) {
+                poct.device.app.thirdparty.NanoApi.uploadCurve(qr, refValues, curveFile)
+            }
+            oneKeyUploadState.value = if (result.ok) {
+                OneKeyUploadState.Success(result.id)
+            } else {
+                OneKeyUploadState.Failure(result.message.ifEmpty { result.error ?: "unknown error" })
+            }
+        }
     }
 
     fun cancelOneKeyTest() {
@@ -1332,6 +1410,8 @@ class SampleSerialViewModel : ViewModel() {
         oneKeyJob?.cancel()
         oneKeyTestAwaitingConfirm.value = false
         oneKeyTestRunning.value = false
+        oneKeyQrCode.value = ""
+        oneKeyUploadState.value = OneKeyUploadState.Idle
         if (wasRunning) {
             viewModelScope.launch(Dispatchers.IO) {
                 CtlCommandsV2.readAllData(CtlCommandsV2.cancel())
@@ -1460,6 +1540,20 @@ class SampleSerialViewModel : ViewModel() {
             oneKeyTestAwaitingConfirm.value = false
             chipConfirmDeferred = null
         }
+    }
+
+    private suspend fun scanQrForOneKey() {
+        withContext(Dispatchers.IO) {
+            CtlCommandsV2.readAllData(CtlCommandsV2.readQR())
+        }
+        val qrValue = withContext(Dispatchers.IO) {
+            pollQrCodeResult {
+                var result = ""
+                CtlCommandsV2.processReadQRStatus { result = it }
+                result
+            }
+        }
+        oneKeyQrCode.value = qrValue
     }
 
     private fun updateOneKeyStep(index: Int, status: OneKeyStepStatus) {
@@ -1804,15 +1898,24 @@ private const val MOTOR_VELOCITY = 88888
 private const val MOTOR_DURATION_MS = 10000
 private const val SCAN_ERROR_NEED_RESET = "!|scan:-3"
 
-private fun defaultOneKeyTestSteps(): List<OneKeyTestStep> =
+internal fun defaultOneKeyTestSteps(): List<OneKeyTestStep> =
     listOf(
         OneKeyTestStep("片仓复位"),
         OneKeyTestStep("插入芯片"),
+        OneKeyTestStep("扫描二维码"),
         OneKeyTestStep("片仓移入"),
         OneKeyTestStep("吸水10秒"),
         OneKeyTestStep("扫描芯片"),
         OneKeyTestStep("显示扫描结果图"),
     )
+
+internal fun pollQrCodeResult(poll: () -> String): String {
+    var qrValue = ""
+    while (qrValue.isEmpty()) {
+        qrValue = poll()
+    }
+    return qrValue
+}
 
 private fun String.toLaserPowerInput(): String {
     val filtered = buildString {
