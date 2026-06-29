@@ -220,10 +220,19 @@ class MainActivity : ComponentActivity() {
 
     override fun dispatchTouchEvent(ev: android.view.MotionEvent?): Boolean {
         if (ev?.action == android.view.MotionEvent.ACTION_DOWN) {
-            setScreenBrightness(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE)
-            resetIdleTimer()
+            onUserTouch()
         }
         return super.dispatchTouchEvent(ev)
+    }
+
+    /**
+     * 任意触摸唤醒：恢复亮度并重置闲置计时器。
+     * Compose Dialog 在独立 window，触摸不经过 dispatchTouchEvent，
+     * 需由对话框内容主动调用本方法。
+     */
+    fun onUserTouch() {
+        setScreenBrightness(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE)
+        resetIdleTimer()
     }
 
     private fun setScreenBrightness(brightness: Float) {

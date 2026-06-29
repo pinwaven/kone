@@ -37,6 +37,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -69,6 +72,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import poct.device.app.App
 import poct.device.app.AppParams
+import poct.device.app.MainActivity
 import poct.device.app.R
 import poct.device.app.RouteConfig
 import poct.device.app.chart.rememberMarker
@@ -325,6 +329,22 @@ private fun FactoryTestButton(
     )
 }
 
+/**
+ * Compose Dialog 在独立 window，触摸不会经过 Activity.dispatchTouchEvent，
+ * 闲置调暗后点击对话框无法恢复亮度。给对话框根节点加此修饰，
+ * 按下时唤醒屏幕。Initial pass + 不消费事件，不影响内部点击。
+ */
+private fun Modifier.wakeScreenOnTouch(): Modifier = this.pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            if (event.type == PointerEventType.Press) {
+                (AppParams.curActivity as? MainActivity)?.onUserTouch()
+            }
+        }
+    }
+}
+
 @Composable
 private fun LaserTestDialog(
     visible: Boolean,
@@ -343,6 +363,7 @@ private fun LaserTestDialog(
     ) {
         Surface(
             modifier = Modifier
+                .wakeScreenOnTouch()
                 .width(300.dp)
                 .height(220.dp),
             shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
@@ -425,6 +446,7 @@ private fun ScrewTestDialog(
     ) {
         Surface(
             modifier = Modifier
+                .wakeScreenOnTouch()
                 .width(440.dp)
                 .height(340.dp),
             shape = RoundedCornerShape(8.dp)
@@ -526,6 +548,7 @@ private fun OneKeyTestDialog(
     ) {
         Surface(
             modifier = Modifier
+                .wakeScreenOnTouch()
                 .width(720.dp)
                 .height(520.dp),
             shape = RoundedCornerShape(8.dp)
@@ -622,6 +645,7 @@ private fun OneKeyChartDialog(
     ) {
         Surface(
             modifier = Modifier
+                .wakeScreenOnTouch()
                 .fillMaxSize(),
             shape = RoundedCornerShape(8.dp)
         ) {
