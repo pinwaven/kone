@@ -53,9 +53,19 @@ captures/
 .idea/CopilotChatHistory.xml
 
 # Keystore files
-# Uncomment the following lines if you do not want to check your keystore files in.
-#*.jks
-#*.keystore
+*.jks
+*.keystore
+*.p12
+*.key
+
+# Local secrets / scratch artifacts
+/data.bin
+
+# Local tooling caches (not for VCS)
+.claude/
+.antigravitycli/
+.gradle_user_home/
+test-btn/
 
 # External native build folder generated in Android Studio 2.2 and later
 .externalNativeBuild
