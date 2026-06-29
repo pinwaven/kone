@@ -82,3 +82,17 @@ Protocol uses `0x5A`/`0xA5` sync bytes for frame detection. ADC data parsing is 
 ### Charts & PDF
 - Charts use **Vico** library. Custom chart style in `chart/ChartStyle.kt`.
 - PDF generation in `pdf/`. Report PDF rendered as Compose screen (`ReportPDF.kt`) then captured.
+
+## Agent skills
+
+### Issue tracker
+
+Local markdown — issues and PRDs live as files under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary — `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context (`CONTEXT.md` + `docs/adr/` at the repo root). See `docs/agents/domain.md`.
