@@ -226,6 +226,7 @@ class WorkMainViewModel : ViewModel() {
         checkStep.value = 0
         workFlow = WorkFlowV2.EMPTY
         continueSacn.value = true
+        isChipRetryUsed = false
     }
 
     fun onDataDetail(record: CaseBean, callback: () -> Unit = {}) {
@@ -1540,6 +1541,42 @@ class WorkMainViewModel : ViewModel() {
         return true
     }
 
+    /** 判断卡片是否插到位 */
+    private suspend fun detectChipInPlace(): Boolean {
+        val gpioReadResult =
+                withContext(Dispatchers.IO) {
+                    CtlCommandsV2.readAllData(CtlCommandsV2.gpioRead())
+                }
+        Timber.d("gpioReadResult: $gpioReadResult")
+
+        return withContext(Dispatchers.IO) { CtlCommandsV2.gpioReadHasCard(gpioReadResult) }
+    }
+
+    // 单次流程内仅允许一次向内移动重试
+    private var isChipRetryUsed = false
+
+    /** 判断卡片是否插到位，未检测到时向内移动 2mm 重试一次（单次流程内仅重试一次） */
+    private suspend fun detectChipInPlaceWithRetry(): Boolean {
+        var hasCard = detectChipInPlace()
+
+        if (!hasCard && !isChipRetryUsed) {
+            isChipRetryUsed = true
+
+            withContext(Dispatchers.IO) {
+                val moveDurationResult =
+                        CtlCommandsV2.readAllData(CtlCommandsV2.moveIn2mm())
+                Timber.w("moveDurationResult: $moveDurationResult")
+
+                // 等待成功
+                CtlCommandsV2.waitMoveDurationStatusSuccess()
+            }
+
+            hasCard = detectChipInPlace()
+        }
+
+        return hasCard
+    }
+
     /** 加载卡片信息 */
     private fun loadCard() {
         viewModelScope.launch {
@@ -1554,16 +1591,7 @@ class WorkMainViewModel : ViewModel() {
             ) {
                 if (isSensorDetectionEnabled()) {
                     // 判断卡片是否插到位
-                    val gpioReadResult =
-                            withContext(Dispatchers.IO) {
-                                CtlCommandsV2.readAllData(CtlCommandsV2.gpioRead())
-                            }
-                    Timber.d("gpioReadResult: $gpioReadResult")
-
-                    val hasCard =
-                            withContext(Dispatchers.IO) {
-                                CtlCommandsV2.gpioReadHasCard(gpioReadResult)
-                            }
+                    val hasCard = detectChipInPlaceWithRetry()
                     if (!hasCard) {
                         actionState.value =
                                 ActionState(
@@ -2262,16 +2290,7 @@ class WorkMainViewModel : ViewModel() {
                                     AppParams.curUser.role != User.ROLE_DEV)
             ) {
                 // 判断卡片是否插到位
-                val gpioReadResult =
-                        withContext(Dispatchers.IO) {
-                            CtlCommandsV2.readAllData(CtlCommandsV2.gpioRead())
-                        }
-                Timber.d("gpioReadResult: $gpioReadResult")
-
-                val hasCard =
-                        withContext(Dispatchers.IO) {
-                            CtlCommandsV2.gpioReadHasCard(gpioReadResult)
-                        }
+                val hasCard = detectChipInPlaceWithRetry()
                 if (!hasCard) {
                     actionState.value =
                             ActionState(

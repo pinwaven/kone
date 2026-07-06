@@ -187,6 +187,10 @@ object CtlCommandsV2 {
         return moveDuration(0, 70000, 1000)
     }
 
+    fun moveIn2mm(): CtlSerialMessageV2 {
+        return moveDuration(0, 70000, 250)
+    }
+
     fun waitMoveToSsStatusSuccess(): Boolean {
         val cmd = poll()
         val result = this.readAllData(cmd)
