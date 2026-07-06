@@ -64,6 +64,8 @@ import poct.device.app.component.AppScaffold
 import poct.device.app.component.AppSwitch
 import poct.device.app.component.AppTopBar
 import poct.device.app.component.NanoEnvironmentSelector
+import poct.device.app.bean.ConfigSysBean
+import poct.device.app.entity.service.SysConfigService
 import poct.device.app.entity.service.TestModeConfigService
 import poct.device.app.theme.bgColor
 import poct.device.app.theme.borderColor
@@ -90,6 +92,7 @@ fun TemporaryOperation(navController: NavController) {
         ) {
             val venueModeEnabled by AppParams.runtimeModeState.venueModeEnabled.collectAsState()
             val testModeEnabled by AppParams.runtimeModeState.testModeEnabled.collectAsState()
+            val sensorDetectionEnabled by AppParams.runtimeModeState.sensorDetectionEnabled.collectAsState()
             var reactionTimeSeconds by remember { mutableStateOf("300") }
             var absorbTimeMillis by remember { mutableStateOf("3000") }
             var scanTimeMillis by remember { mutableStateOf("14000") }
@@ -176,6 +179,40 @@ fun TemporaryOperation(navController: NavController) {
                             uncheckedBorderColor = Color(0xFFBFC7D5)
                         ),
                         onCheckedChange = { AppParams.runtimeModeState.setVenueModeEnabled(it) }
+                    )
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(id = R.string.sensor_detection),
+                        color = fontColor,
+                        fontSize = 18.sp
+                    )
+                    AppSwitch(
+                        checked = sensorDetectionEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = Color(0xFF1677FF),
+                            checkedBorderColor = Color(0xFF1677FF),
+                            uncheckedThumbColor = Color.White,
+                            uncheckedTrackColor = Color(0xFFBFC7D5),
+                            uncheckedBorderColor = Color(0xFFBFC7D5)
+                        ),
+                        onCheckedChange = { enabled ->
+                            AppParams.runtimeModeState.setSensorDetectionEnabled(enabled)
+                            coroutineScope.launch {
+                                val config = SysConfigService.findBean(
+                                    ConfigSysBean.PREFIX,
+                                    ConfigSysBean::class
+                                )
+                                config.sensorDetection = if (enabled) "y" else "n"
+                                SysConfigService.saveBean(ConfigSysBean.PREFIX, config)
+                            }
+                        }
                     )
                 }
                 Spacer(modifier = Modifier.height(24.dp))

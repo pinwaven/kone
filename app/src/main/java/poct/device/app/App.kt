@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import poct.device.app.bean.ConfigInfoBean
+import poct.device.app.bean.ConfigSysBean
 import poct.device.app.entity.service.SysConfigService
 import poct.device.app.serial.v2.SerialHelperV2
 import poct.device.app.serial.v2.ctl.CtlCommandsV2
@@ -106,6 +107,13 @@ class App : Application() {
     private fun startupService() {
         Thread {
             CoroutineScope(Dispatchers.IO).launch {
+                // 恢复传感器检测开关
+                val configSys =
+                    SysConfigService.findBean(ConfigSysBean.PREFIX, ConfigSysBean::class)
+                AppParams.runtimeModeState.setSensorDetectionEnabled(
+                    ConfigSysBean.isSensorDetectionEnabled(configSys.sensorDetection)
+                )
+
                 // TODO 简化信息
                 // 串口服务
 //                ctlService = CtlSerialServiceV2()

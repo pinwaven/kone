@@ -1552,32 +1552,33 @@ class WorkMainViewModel : ViewModel() {
                             sysConfig.value.scan.isEmpty() ||
                             AppParams.curUser.role != User.ROLE_DEV
             ) {
-                // 判断卡片是否插到位
-                val gpioReadResult =
-                        withContext(Dispatchers.IO) {
-                            CtlCommandsV2.readAllData(CtlCommandsV2.gpioRead())
-                        }
-                Timber.d("gpioReadResult: $gpioReadResult")
-
-                val hasCard =
-                        withContext(Dispatchers.IO) {
-                            CtlCommandsV2.gpioReadHasCard(gpioReadResult)
-                        }
-                if (!hasCard) {
-                    actionState.value =
-                            ActionState(
-                                    EVT_DEV_ERROR,
-                                    App.getContext().getString(R.string.work_case_put_chip_tip)
-                            )
-                    return@launch
-                } else {
-                    // 扫描二维码
-                    val readQRResult =
+                if (isSensorDetectionEnabled()) {
+                    // 判断卡片是否插到位
+                    val gpioReadResult =
                             withContext(Dispatchers.IO) {
-                                CtlCommandsV2.readAllData(CtlCommandsV2.readQR())
+                                CtlCommandsV2.readAllData(CtlCommandsV2.gpioRead())
                             }
-                    Timber.d("readQRResult: $readQRResult")
+                    Timber.d("gpioReadResult: $gpioReadResult")
+
+                    val hasCard =
+                            withContext(Dispatchers.IO) {
+                                CtlCommandsV2.gpioReadHasCard(gpioReadResult)
+                            }
+                    if (!hasCard) {
+                        actionState.value =
+                                ActionState(
+                                        EVT_DEV_ERROR,
+                                        App.getContext().getString(R.string.work_case_put_chip_tip)
+                                )
+                        return@launch
+                    }
                 }
+                // 扫描二维码
+                val readQRResult =
+                        withContext(Dispatchers.IO) {
+                            CtlCommandsV2.readAllData(CtlCommandsV2.readQR())
+                        }
+                Timber.d("readQRResult: $readQRResult")
             }
 
             continueSacn.value = true
@@ -2079,6 +2080,10 @@ class WorkMainViewModel : ViewModel() {
         return AppParams.runtimeModeState.testModeEnabled.value
     }
 
+    private fun isSensorDetectionEnabled(): Boolean {
+        return AppParams.runtimeModeState.sensorDetectionEnabled.value
+    }
+
     private suspend fun applyTestModeConfigOverride(config: CardConfig): CardConfig {
         if (!isTestModeEnabled()) {
             return config
@@ -2251,9 +2256,10 @@ class WorkMainViewModel : ViewModel() {
 
     fun onActionContinueConfirm() {
         viewModelScope.launch {
-            if (sysConfig.value.scan == "y" ||
-                            sysConfig.value.scan.isEmpty() ||
-                            AppParams.curUser.role != User.ROLE_DEV
+            if (isSensorDetectionEnabled() &&
+                            (sysConfig.value.scan == "y" ||
+                                    sysConfig.value.scan.isEmpty() ||
+                                    AppParams.curUser.role != User.ROLE_DEV)
             ) {
                 // 判断卡片是否插到位
                 val gpioReadResult =

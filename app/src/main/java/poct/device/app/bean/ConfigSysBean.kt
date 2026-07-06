@@ -3,6 +3,7 @@ package poct.device.app.bean
 data class ConfigSysBean(
     var lang: String = "cn",
     var scan: String = "y", // 是否扫码 y/n
+    var sensorDetection: String = "y", // 传感器检测 y/n，空视为开启
 
     var jctm: String = "", // 检测条码: y/n
     var sys: String = "", // 实验室名称
@@ -29,5 +30,8 @@ data class ConfigSysBean(
 
         fun isNanoFlow(flow: String): Boolean =
             defaultFlow(flow) == FLOW_NANO
+
+        fun isSensorDetectionEnabled(sensorDetection: String): Boolean =
+            sensorDetection != "n"
     }
 }

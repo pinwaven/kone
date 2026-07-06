@@ -103,3 +103,11 @@ __pycache__/
 .vscode/app/src/main/res/raw/two_point.mp4
 
 app/src/main/res/raw/two_point.mp4
+
+# Stray Gradle user home dirs (leaked to repo root)
+/caches/
+/daemon/
+/wrapper/
+/native/
+/android/
+/kotlin-profile/

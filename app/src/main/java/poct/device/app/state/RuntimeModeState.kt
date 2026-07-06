@@ -7,6 +7,7 @@ class RuntimeModeState(
 ) {
     val venueModeEnabled = MutableStateFlow(false)
     val testModeEnabled = MutableStateFlow(false)
+    val sensorDetectionEnabled = MutableStateFlow(true)
     val nanoEnvironment = MutableStateFlow(NanoEnvironment.PRODUCTION)
 
     private var factoryTestUnlockedAtMillis: Long? = null
@@ -35,6 +36,10 @@ class RuntimeModeState(
             homeVenueDetectionWaitCompleted = false
             venueContinueCutOffWaitSkipRequested = false
         }
+    }
+
+    fun setSensorDetectionEnabled(enabled: Boolean) {
+        sensorDetectionEnabled.value = enabled
     }
 
     fun setTestModeEnabled(enabled: Boolean) {

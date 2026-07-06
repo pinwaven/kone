@@ -447,6 +447,7 @@
     <string name="factory_test">Factory test</string>
     <string name="factory_test_password_content">Factory test password is required</string>
     <string name="venue_mode">Venue mode</string>
+    <string name="sensor_detection">Sensor detection</string>
     <string name="test_mode">Test mode</string>
     <string name="test_mode_reaction_time">Reaction time</string>
     <string name="test_mode_reaction_time_unit">seconds</string>
