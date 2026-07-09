@@ -585,6 +585,9 @@ class WorkMainViewModel : ViewModel() {
                     }
                     FileOutputStream(file).use { outputStream -> outputStream.write(queryResult!!) }
 
+                    // 芯片扫描出结果后上传曲线 BIN 文件；失败忽略，不影响检测流程
+                    uploadCurveQuietly(bean.value.qrCode, file)
+
                     checkStep.value = 85
                     progress.value = 85F
 
@@ -797,6 +800,24 @@ class WorkMainViewModel : ViewModel() {
             withContext(Dispatchers.Main) {
                 AppToastUtil.shortShow(App.getContext().getString(R.string.report_upload_success))
             }
+        }
+    }
+
+    /** 上传曲线 BIN 文件到服务器；独立协程，任何失败仅记日志，不影响检测流程 */
+    private fun uploadCurveQuietly(qrCode: String, curveFile: File) {
+        if (qrCode.isEmpty()) {
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = runCatching { NanoApi.uploadCurve(qrCode, "{}", curveFile) }
+            result.fold(
+                    onSuccess = {
+                        Timber.w(
+                                "uploadCurve(work): ok=${it.ok} id=${it.id} status=${it.status} msg=${it.message}"
+                        )
+                    },
+                    onFailure = { Timber.w(it, "uploadCurve(work) failed (ignored)") },
+            )
         }
     }
 
