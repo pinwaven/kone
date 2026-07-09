@@ -1618,6 +1618,32 @@ class WorkMainViewModel : ViewModel() {
         return hasCard
     }
 
+    // 芯片未检测到时，等待用户确认"已完全插入"后要继续执行的流程
+    private var pendingChipInsertedAction: (suspend () -> Unit)? = null
+
+    /** 重试后仍未检测到芯片：弹确认框，用户确认"已完全插入"后执行 action */
+    private fun askChipInsertedConfirm(action: suspend () -> Unit) {
+        pendingChipInsertedAction = action
+        actionState.value =
+                ActionState(
+                        EVT_CHIP_INSERTED_CONFIRM,
+                        App.getContext().getString(R.string.work_case_put_chip_tip)
+                )
+    }
+
+    /** 用户点击"已完全插入"：继续后续流程 */
+    fun onChipInsertedConfirm() {
+        val action = pendingChipInsertedAction
+        pendingChipInsertedAction = null
+        onClearInteraction()
+        viewModelScope.launch { action?.invoke() }
+    }
+
+    /** 用户点击"取消"：清除待续流程，处理方式与关闭原提示框一致（由 UI 侧回调） */
+    fun onChipInsertedCancel() {
+        pendingChipInsertedAction = null
+    }
+
     /** 加载卡片信息 */
     private fun loadCard() {
         viewModelScope.launch {
@@ -1634,25 +1660,29 @@ class WorkMainViewModel : ViewModel() {
                     // 判断卡片是否插到位
                     val hasCard = detectChipInPlaceWithRetry()
                     if (!hasCard) {
-                        actionState.value =
-                                ActionState(
-                                        EVT_DEV_ERROR,
-                                        App.getContext().getString(R.string.work_case_put_chip_tip)
-                                )
+                        askChipInsertedConfirm { loadCardAfterChipCheck() }
                         return@launch
                     }
                 }
-                // 扫描二维码
-                val readQRResult =
-                        withContext(Dispatchers.IO) {
-                            CtlCommandsV2.readAllData(CtlCommandsV2.readQR())
-                        }
-                Timber.d("readQRResult: $readQRResult")
+                loadCardAfterChipCheck()
+            } else {
+                continueSacn.value = true
+                readQrSuccess()
             }
-
-            continueSacn.value = true
-            readQrSuccess()
         }
+    }
+
+    /** 芯片确认到位后的加载流程：扫码并继续 */
+    private suspend fun loadCardAfterChipCheck() {
+        // 扫描二维码
+        val readQRResult =
+                withContext(Dispatchers.IO) {
+                    CtlCommandsV2.readAllData(CtlCommandsV2.readQR())
+                }
+        Timber.d("readQRResult: $readQRResult")
+
+        continueSacn.value = true
+        readQrSuccess()
     }
 
     private fun readQrSuccess() {
@@ -2333,11 +2363,7 @@ class WorkMainViewModel : ViewModel() {
                 // 判断卡片是否插到位
                 val hasCard = detectChipInPlaceWithRetry()
                 if (!hasCard) {
-                    actionState.value =
-                            ActionState(
-                                    EVT_DEV_ERROR,
-                                    App.getContext().getString(R.string.work_case_put_chip_tip)
-                            )
+                    askChipInsertedConfirm { doNext() }
                     return@launch
                 }
             }
@@ -2772,6 +2798,9 @@ class WorkMainViewModel : ViewModel() {
         const val EVT_LOADING = "loading"
 
         const val EVT_DEV_ERROR = "devError"
+
+        // 重试后仍未检测到芯片，请用户确认"已完全插入"或取消
+        const val EVT_CHIP_INSERTED_CONFIRM = "chipInsertedConfirm"
 
         const val EVT_DEV_ERROR_NETWORK = "devErrorNetwork"
         const val EVT_DEV_WARNING = "devWarning"

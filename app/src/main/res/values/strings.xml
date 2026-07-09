@@ -141,6 +141,7 @@
     <string name="work_f_reagent_id">试剂批次:</string>
     <string name="work_case_put_chip">放入芯片</string>
     <string name="work_case_put_chip_tip">请把“芯片”推至最“里面”</string>
+    <string name="work_chip_fully_inserted">已在最里面</string>
     <string name="work_move_chip_error">芯片移动异常：%1$s</string>
     <string name="work_case_cut_off2_wait">采样反应中，倒计时结束后点击“下一步”开始检测</string>
     <string name="work_case_wait">样本反应</string>

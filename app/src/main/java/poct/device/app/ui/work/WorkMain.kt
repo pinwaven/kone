@@ -317,6 +317,19 @@ fun WorkMainInteraction(
             content = msg,
             onOk = { onActionStart() },
         )
+    } else if (actionState.value.event == WorkMainViewModel.EVT_CHIP_INSERTED_CONFIRM) {
+        // 重试后仍未检测到芯片：取消与关闭原提示框处理一致，"已完全插入"则继续后续流程
+        AppConfirm(
+            title = stringResource(id = R.string.confirm_title_remind),
+            visible = true,
+            content = actionState.value.msg ?: stringResource(id = R.string.work_case_put_chip_tip),
+            confirmText = stringResource(id = R.string.work_chip_fully_inserted),
+            onCancel = {
+                viewModel.onChipInsertedCancel()
+                onActionStart()
+            },
+            onConfirm = { viewModel.onChipInsertedConfirm() },
+        )
     } else if (actionState.value.event == WorkMainViewModel.EVT_DEV_ERROR_NETWORK) {
         val msg = actionState.value.msg ?: "No Data"
         AppAlert(
