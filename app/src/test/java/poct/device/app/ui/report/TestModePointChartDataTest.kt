@@ -455,4 +455,66 @@ class TestModePointChartDataTest {
         assertEquals(340.0, regions[0].endPoint.x, 0.0)
     }
 
+    @Test
+    fun findSlopeRegionsDetectsAllFourWavesIncludingSlowRiseSlowFallOnes() {
+        // 真机采样：四个波，其中第 1 波（约 77~369）和第 3 波（约 938~1179）
+        // 升降缓慢，近窗跌幅不足曾导致漏检。
+        val values =
+                requireNotNull(javaClass.classLoader?.getResourceAsStream("wave_four_regions.txt"))
+                        .bufferedReader()
+                        .readText()
+                        .split(',')
+                        .map { it.trim().toDouble() }
+        val points = values.mapIndexed { index, y -> CasePoint(index.toDouble(), y) }
+
+        val regions = TestModePointChartData.findSlopeRegions(points)
+
+        assertEquals(4, regions.size)
+        // 第 1 波（慢升慢降，期望约 77~369）
+        assertEquals(81, regions[0].startIndex)
+        assertEquals(376, regions[0].endIndex)
+        assertEquals(238, regions[0].peakIndex)
+        // 第 2 波（上升段有肩部平台、峰后双峰，期望约 380~669）
+        assertEquals(386, regions[1].startIndex)
+        assertEquals(665, regions[1].endIndex)
+        assertEquals(511, regions[1].peakIndex)
+        // 第 3 波（慢升，紧邻第 4 波，期望约 938~1179）
+        assertEquals(924, regions[2].startIndex)
+        assertEquals(1185, regions[2].endIndex)
+        assertEquals(1036, regions[2].peakIndex)
+        // 第 4 波
+        assertEquals(1199, regions[3].startIndex)
+        assertEquals(1484, regions[3].endIndex)
+        assertEquals(1323, regions[3].peakIndex)
+    }
+
+    @Test
+    fun findSlopeRegionsDoesNotEmitSpuriousRegionInsideFirstWave() {
+        // 真机采样：起始段有幅度约 30 的噪声小包（74~130），曾把区域起点锚死在噪声上，
+        // 再经跨度上限截断产生 393~477 的假波，叠在真实第 1 波（约 352~635）内部。
+        val values =
+                requireNotNull(javaClass.classLoader?.getResourceAsStream("wave_noise_bump.txt"))
+                        .bufferedReader()
+                        .readText()
+                        .split(',')
+                        .map { it.trim().toDouble() }
+        val points = values.mapIndexed { index, y -> CasePoint(index.toDouble(), y) }
+
+        val regions = TestModePointChartData.findSlopeRegions(points)
+
+        assertEquals(3, regions.size)
+        // 第 1 波（期望约 352~635），无内部假波
+        assertEquals(359, regions[0].startIndex)
+        assertEquals(634, regions[0].endIndex)
+        assertEquals(487, regions[0].peakIndex)
+        // 第 2 波
+        assertEquals(876, regions[1].startIndex)
+        assertEquals(1175, regions[1].endIndex)
+        assertEquals(1028, regions[1].peakIndex)
+        // 第 3 波
+        assertEquals(1182, regions[2].startIndex)
+        assertEquals(1386, regions[2].endIndex)
+        assertEquals(1282, regions[2].peakIndex)
+    }
+
 }
