@@ -34,6 +34,7 @@ import poct.device.app.R
 import poct.device.app.bean.VersionBean
 import poct.device.app.component.AppFilledButton
 import poct.device.app.component.AppOutlinedButton
+import poct.device.app.component.wakeScreenOnTouch
 import poct.device.app.theme.bgColor
 import poct.device.app.theme.tipFontColor
 
@@ -46,7 +47,9 @@ fun AfterSaleVersionHandleDialog(
 ) {
     Dialog(onDismissRequest = {}) {
         Surface(
-            modifier = Modifier.size(280.dp),
+            modifier = Modifier
+                .wakeScreenOnTouch()
+                .size(280.dp),
             shape = RoundedCornerShape(4.dp)
         ) {
             Box(

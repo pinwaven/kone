@@ -57,7 +57,7 @@ object NanoApi {
     const val FLOW_NANO     = "nano"
 
     // Holds a pre-fetched upgrade result so AfterSaleVersionUpgradeViewModel can
-    // consume it directly without re-querying (used when upgrade is triggered from SysFunApiTest).
+    // consume it directly without re-querying (used when upgrade is triggered from SysFunInfo).
     var pendingUpgrade: poct.device.app.thirdparty.model.nano.NanoUpgradeResp? = null
 
     private val authClient: OkHttpClient by lazy {

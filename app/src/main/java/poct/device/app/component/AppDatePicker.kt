@@ -90,7 +90,7 @@ private fun AppDatePickerInnerDialog(
     var dateState by remember { mutableStateOf(value) }
     Dialog(onDismissRequest = { onDismissRequest() }) {
         Surface(
-            modifier = Modifier,
+            modifier = Modifier.wakeScreenOnTouch(),
             shape = RoundedCornerShape(8.dp)
         ) {
             Column(

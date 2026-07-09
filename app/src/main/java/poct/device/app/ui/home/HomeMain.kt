@@ -64,6 +64,7 @@ fun HomeMain(
                 title = LocalContext.current.getString(R.string.home),
                 homeEnabled = false,
                 loginInfoEnabled = false,
+                logoEnabled = true,
                 showNanoEnvironmentBadge = true
             )
         }

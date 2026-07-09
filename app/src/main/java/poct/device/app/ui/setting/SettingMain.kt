@@ -68,6 +68,7 @@ import poct.device.app.component.AppPreviewWrapper
 import poct.device.app.component.AppScaffold
 import poct.device.app.component.AppTopBar
 import poct.device.app.component.AppViewWrapper
+import poct.device.app.component.wakeScreenOnTouch
 import poct.device.app.entity.User
 import poct.device.app.state.ViewState
 import poct.device.app.theme.bgColor
@@ -156,29 +157,35 @@ fun SettingMainBody(
             title = stringResource(id = R.string.sys_fun_menu)
         ) {
             Spacer(modifier = Modifier.height(12.dp))
+            // 每行三个按钮：三等分槽位，不足补空位
             Row(
-                modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly
+                modifier = Modifier.fillMaxWidth()
             ) {
-                AppMenuCardItem(
-                    navController = navController,
-                    label = stringResource(id = R.string.sys_config_other_wlan),
-                    painter = painterResource(id = R.mipmap.wlan_icon),
-                    onClick = {
-                        viewModel.sysWifiConfig()
-                    }
-                )
-                AppMenuCardItem(
-                    navController = navController,
-                    label = stringResource(id = R.string.sys_fun_menu_device),
-                    painter = painterResource(id = R.mipmap.xtxx_icon),
-                    onClick = { navController.navigate(RouteConfig.SYS_FUN_INFO) }
-                )
-                AppMenuCardItem(
-                    navController = navController,
-                    label = stringResource(id = R.string.sys_fun_api_test_menu),
-                    painter = painterResource(id = R.mipmap.tjsjk_fwz_icon),
-                    onClick = { navController.navigate(RouteConfig.SYS_FUN_API_TEST) }
-                )
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AppMenuCardItem(
+                        navController = navController,
+                        label = stringResource(id = R.string.sys_config_other_wlan),
+                        painter = painterResource(id = R.mipmap.wlan_icon),
+                        onClick = {
+                            viewModel.sysWifiConfig()
+                        }
+                    )
+                }
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AppMenuCardItem(
+                        navController = navController,
+                        label = stringResource(id = R.string.sys_fun_menu_device),
+                        painter = painterResource(id = R.mipmap.xtxx_icon),
+                        onClick = { navController.navigate(RouteConfig.SYS_FUN_INFO) }
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
                 // TODO 简化信息
 //                AppMenuCardItem(
 //                    navController = navController,
@@ -356,6 +363,7 @@ private fun FactoryTestPasswordDialog(
         }
         Surface(
             modifier = Modifier
+                .wakeScreenOnTouch()
                 .width(280.dp)
                 .height(190.dp),
             shape = RoundedCornerShape(8.dp)

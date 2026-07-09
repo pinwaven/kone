@@ -71,6 +71,8 @@ fun AppTopBar(
     backEnabled: Boolean = false,
     // 详情按钮
     detailEnable: String = "-",
+    // 标题栏 logo，仅主页显示
+    logoEnabled: Boolean = false,
     onHome: () -> Unit = { navController.navigate(RouteConfig.HOME_MAIN) },
     onBack: () -> Unit = { navController.popBackStack() },
     onDetail: () -> Unit = {},
@@ -98,7 +100,7 @@ fun AppTopBar(
             batteryPlugged = batteryPlugged,
         )
         AppTopBarTitleBlock(
-            title, homeEnabled, loginInfoEnabled, backEnabled, detailEnable,
+            title, homeEnabled, loginInfoEnabled, backEnabled, detailEnable, logoEnabled,
             onNavigate = { navController.navigate(it) },
             onLogout = { viewModel.logout(it) },
             onHome = { onHome() },
@@ -205,6 +207,7 @@ private fun AppTopBarTitleBlock(
     // 返回按钮
     backEnabled: Boolean = false,
     detailEnable: String,
+    logoEnabled: Boolean = false,
     onNavigate: (path: String) -> Unit,
     onLogout: (() -> Unit) -> Unit,
     onHome: () -> Unit,
@@ -274,7 +277,9 @@ private fun AppTopBarTitleBlock(
                 .fillMaxHeight()
                 .width(140.dp)
         ) {
-            AppTopBarTitleBlock(title)
+            if (logoEnabled) {
+                AppTopBarTitleBlock(title)
+            }
         }
 
         // 右边操作
@@ -381,8 +386,8 @@ private fun AppTopBarTitleBlock(title: String) {
 //        )
         Image(
 //            painter = painterResource(id = R.drawable.vh_logo),
-            painter = painterResource(id = R.drawable.vh_logo_v2),
-//            painter = painterResource(id = R.drawable.vh_logo_v3),
+//            painter = painterResource(id = R.drawable.vh_logo_v2),
+            painter = painterResource(id = R.drawable.vh_logo_v3),
             contentDescription = "",
             modifier = Modifier
                 .fillMaxWidth()

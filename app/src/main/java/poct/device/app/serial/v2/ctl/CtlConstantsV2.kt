@@ -64,6 +64,8 @@ object CtlConstantsV2 {
 
     const val CMD_ACTION_MOVE_DURATION_STATUS_COMPLETED: String = "COMPLETED"
 
+    const val CMD_ACTION_STATUS_ERROR: String = "ERROR"
+
     // 移动到传感器
     const val CMD_ACTION_MOVE_TO_SS: Byte = 0x42
 

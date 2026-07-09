@@ -71,7 +71,9 @@ private fun NanoEnvironmentDialog(
     }
     Dialog(onDismissRequest = onCancel) {
         Surface(
-            modifier = Modifier.width(300.dp),
+            modifier = Modifier
+                .wakeScreenOnTouch()
+                .width(300.dp),
             shape = RoundedCornerShape(8.dp)
         ) {
             Column(

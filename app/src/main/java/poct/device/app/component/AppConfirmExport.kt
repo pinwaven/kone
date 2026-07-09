@@ -58,6 +58,7 @@ fun AppConfirmExport(
     ) {
         Surface(
             modifier = Modifier
+                .wakeScreenOnTouch()
                 .width(280.dp)
                 .height(210.dp),
             shape = RoundedCornerShape(8.dp)

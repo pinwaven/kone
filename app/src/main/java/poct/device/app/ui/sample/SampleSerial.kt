@@ -37,9 +37,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -67,12 +64,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import poct.device.app.App
 import poct.device.app.AppParams
-import poct.device.app.MainActivity
 import poct.device.app.R
 import poct.device.app.RouteConfig
 import poct.device.app.chart.rememberMarker
@@ -81,6 +79,7 @@ import poct.device.app.component.AppFilledButton
 import poct.device.app.component.AppPreviewWrapper
 import poct.device.app.component.AppScaffold
 import poct.device.app.component.AppTextField
+import poct.device.app.component.wakeScreenOnTouch
 import poct.device.app.entity.CasePoint
 import poct.device.app.serial.v2.ctl.CtlCommandsV2
 import poct.device.app.serial.v2.ctl.CtlConstantsV2
@@ -240,17 +239,6 @@ fun SampleSerial(
                             viewModel.startOneKeyTest()
                         }
                     )
-//                    Button(onClick = { viewModel.moveDatabase(navController) }) {
-//                        Text(text = "移动数据库")
-//                    }
-//                    Spacer(modifier = Modifier.height(12.dp))
-//                    Button(onClick = { viewModel.sendTest2(navController) }) {
-//                        Text(text = "上传测试")
-//                    }
-//                    Spacer(modifier = Modifier.height(12.dp))
-//                    Button(onClick = { viewModel.updatePdf(navController) }) {
-//                        Text(text = "更新PDF")
-//                    }
                 }
             }
         }
@@ -327,22 +315,6 @@ private fun FactoryTestButton(
         onClick = onClick,
         enabled = enabled,
     )
-}
-
-/**
- * Compose Dialog 在独立 window，触摸不会经过 Activity.dispatchTouchEvent，
- * 闲置调暗后点击对话框无法恢复亮度。给对话框根节点加此修饰，
- * 按下时唤醒屏幕。Initial pass + 不消费事件，不影响内部点击。
- */
-private fun Modifier.wakeScreenOnTouch(): Modifier = this.pointerInput(Unit) {
-    awaitPointerEventScope {
-        while (true) {
-            val event = awaitPointerEvent(PointerEventPass.Initial)
-            if (event.type == PointerEventType.Press) {
-                (AppParams.curActivity as? MainActivity)?.onUserTouch()
-            }
-        }
-    }
 }
 
 @Composable
@@ -911,7 +883,13 @@ class SampleSerialViewModel : ViewModel() {
     val screwTestMessage = MutableStateFlow("")
     private var oneKeyJob: Job? = null
     private var screwTestJob: Job? = null
+
+    // 片仓移入/移出/复位等轮询指令的 Job，"取消指令"时一并取消，停止轮询
+    private var commandJob: Job? = null
     private var chipConfirmDeferred: CompletableDeferred<Unit>? = null
+
+    // 单次一键测试内仅允许一次向内移动重试
+    private var isOneKeyChipRetryUsed = false
 
     fun getDeviceId() {
         val sn: String = App.getDeviceId()
@@ -1027,7 +1005,7 @@ class SampleSerialViewModel : ViewModel() {
     }
 
     fun moveIn() {
-        viewModelScope.launch {
+        commandJob = viewModelScope.launch {
             text.value = ("片仓移入中。。。")
             withContext(Dispatchers.IO) {
                 val moveToSsResult =
@@ -1042,7 +1020,7 @@ class SampleSerialViewModel : ViewModel() {
     }
 
     fun moveOut() {
-        viewModelScope.launch {
+        commandJob = viewModelScope.launch {
             text.value = ("片仓移出中。。。")
             withContext(Dispatchers.IO) {
                 val moveToSsResult =
@@ -1070,7 +1048,7 @@ class SampleSerialViewModel : ViewModel() {
     fun absorb() {
         viewModelScope.launch {
             text.value = ("吸水中。。。")
-            withContext(Dispatchers.IO) {
+            val moveErrorCode = withContext(Dispatchers.IO) {
                 val result = CtlCommandsV2.readAllData(CtlCommandsV2.absorb(240 * 1000))
 
                 withContext(Dispatchers.Main) {
@@ -1079,9 +1057,15 @@ class SampleSerialViewModel : ViewModel() {
                 }
 
                 CtlCommandsV2.waitAbsorbStatusSuccess()
+
+                // 吸水后移入芯片
+                CtlCommandsV2.moveChipInAfterAbsorb()
             }
-            text.value =
+            text.value = if (moveErrorCode.isEmpty()) {
                 ("吸水 success")
+            } else {
+                ("吸水后芯片移入失败: $moveErrorCode")
+            }
         }
     }
 
@@ -1120,6 +1104,9 @@ class SampleSerialViewModel : ViewModel() {
     }
 
     fun cancel() {
+        // 先取消本地轮询 Job，停止 waitMoveToSs/waitMoveDuration 等轮询查询
+        commandJob?.cancel()
+        commandJob = null
         viewModelScope.launch {
             text.value = ("取消中。。。")
             withContext(Dispatchers.IO) {
@@ -1213,38 +1200,27 @@ class SampleSerialViewModel : ViewModel() {
     }
 
     fun sendResetCase() {
-        viewModelScope.launch {
+        commandJob = viewModelScope.launch {
             text.value = ("仓片复位中。。。")
 
             withContext(Dispatchers.IO) {
                 CtlCommandsV2.readAllData(CtlCommandsV2.homing())
-                homingSuccess()
-            }
-        }
-    }
-
-    private fun homingSuccess() {
-        CtlCommandsV2.processHomingStatus { homingSuccessCustomFunction(it) }
-    }
-
-    private fun homingSuccessCustomFunction(progressVal: Int) {
-        viewModelScope.launch {
-            if (progressVal < CtlConstantsV2.CMD_ACTION_HOMING_STATUS_COMPLETED) {
-                withContext(Dispatchers.IO) {
-                    homingSuccess()
-                }
-            } else {
-                withContext(Dispatchers.IO) {
-                    val moveToSsResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
-                    Timber.w("moveToSsResult: $moveToSsResult")
-
-                    // 等待成功
-                    CtlCommandsV2.waitMoveToSsStatusSuccess()
+                // 轮询等待复位完成；每轮检查取消状态，"取消指令"后立即停止轮询
+                var progressVal = 0
+                while (progressVal < CtlConstantsV2.CMD_ACTION_HOMING_STATUS_COMPLETED) {
+                    ensureActive()
+                    CtlCommandsV2.processHomingStatus { progressVal = it }
                 }
 
-                text.value = ("仓片复位 success")
+                val moveToSsResult =
+                    CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
+                Timber.w("moveToSsResult: $moveToSsResult")
+
+                // 等待成功
+                CtlCommandsV2.waitMoveToSsStatusSuccess()
             }
+
+            text.value = ("仓片复位 success")
         }
     }
 
@@ -1355,6 +1331,7 @@ class SampleSerialViewModel : ViewModel() {
         }
         oneKeyJob?.cancel()
         chipConfirmDeferred = null
+        isOneKeyChipRetryUsed = false
         oneKeyTestSteps.value = defaultOneKeyTestSteps()
         oneKeyTestMessage.value = "开始一键测试"
         oneKeyTestChartVisible.value = false
@@ -1368,7 +1345,6 @@ class SampleSerialViewModel : ViewModel() {
             viewModelScope.launch {
                 try {
                     runOneKeyStep(0) {
-                        ensureNoChipInDevice()
                         resetCaseForOneKey()
                     }
                     waitChipInsertedStep()
@@ -1404,7 +1380,14 @@ class SampleSerialViewModel : ViewModel() {
     }
 
     fun confirmChipInserted() {
-        chipConfirmDeferred?.complete(Unit)
+        viewModelScope.launch {
+            try {
+                ensureChipInDevice()
+                chipConfirmDeferred?.complete(Unit)
+            } catch (e: IOException) {
+                oneKeyTestMessage.value = e.message ?: "检测设备内芯片失败"
+            }
+        }
     }
 
     fun dismissOneKeyChart() {
@@ -1595,15 +1578,33 @@ class SampleSerialViewModel : ViewModel() {
             }
     }
 
-    private suspend fun ensureNoChipInDevice() {
+    private fun detectChipForOneKey(): Boolean {
+        val gpioResult = CtlCommandsV2.readAllData(CtlCommandsV2.gpioRead())
+        Timber.w("one key gpioResult: $gpioResult")
+        if (gpioResult.isBlank()) {
+            throw IOException("检测设备内芯片失败")
+        }
+        return CtlCommandsV2.gpioReadHasCard(gpioResult)
+    }
+
+    /** 检测设备内芯片，未检测到时向内移动 2mm 重试一次（单次测试内仅重试一次） */
+    private suspend fun ensureChipInDevice() {
         withContext(Dispatchers.IO) {
-            val gpioResult = CtlCommandsV2.readAllData(CtlCommandsV2.gpioRead())
-            Timber.w("one key gpioResult: $gpioResult")
-            if (gpioResult.isBlank()) {
-                throw IOException("检测设备内芯片失败")
+            if (detectChipForOneKey()) {
+                return@withContext
             }
-            if (CtlCommandsV2.gpioReadHasCard(gpioResult)) {
-                throw IOException("设备中检测到芯片，请先取出后重试")
+            if (isOneKeyChipRetryUsed) {
+                throw IOException("设备中未检测到芯片，请先插入后重试")
+            }
+            isOneKeyChipRetryUsed = true
+
+            val moveDurationResult = CtlCommandsV2.readAllData(CtlCommandsV2.moveIn2mm())
+            Timber.w("one key moveDurationResult: $moveDurationResult")
+            // 等待成功
+            CtlCommandsV2.waitMoveDurationStatusSuccess()
+
+            if (!detectChipForOneKey()) {
+                throw IOException("设备中未检测到芯片，请先插入后重试")
             }
         }
     }
@@ -1612,7 +1613,7 @@ class SampleSerialViewModel : ViewModel() {
         withContext(Dispatchers.IO) {
             val homingResult = CtlCommandsV2.readAllData(CtlCommandsV2.homing())
             Timber.w("one key homingResult: $homingResult")
-            waitPollForOneKey("片仓复位", 30_000L) { result ->
+            waitPollForOneKey("片仓复位", 45_000L) { result ->
                 CtlConstantsV2.HOMING_STATUS_MAP.any { (key, value) ->
                     value >= CtlConstantsV2.CMD_ACTION_HOMING_STATUS_COMPLETED &&
                         result.contains("s:$key")
@@ -1621,21 +1622,21 @@ class SampleSerialViewModel : ViewModel() {
             val moveToSsResult =
                 CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
             Timber.w("one key reset moveToSsResult: $moveToSsResult")
-            waitPollForOneKey("片仓复位移出", 15_000L) {
+            waitPollForOneKey("片仓复位移出", 25_000L) {
                 it.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)
             }
         }
     }
 
-    private fun moveFrontForScrewTest() {
+    private suspend fun moveFrontForScrewTest() {
         val result = CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
         Timber.w("screw front result: $result")
-        waitPollForScrewTest("移出", 15_000L) {
+        waitPollForScrewTest("移出", 25_000L) {
             it.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)
         }
     }
 
-    private fun moveBackForScrewTest() {
+    private suspend fun moveBackForScrewTest() {
         val result = CtlCommandsV2.readAllData(CtlCommandsV2.moveIn())
         Timber.w("screw back result: $result")
         waitPollForScrewTest("移入", 15_000L) {
@@ -1643,7 +1644,7 @@ class SampleSerialViewModel : ViewModel() {
         }
     }
 
-    private fun waitPollForScrewTest(
+    private suspend fun waitPollForScrewTest(
         actionName: String,
         timeoutMillis: Long,
         isCompleted: (String) -> Boolean,
@@ -1656,7 +1657,7 @@ class SampleSerialViewModel : ViewModel() {
             val moveToSsResult =
                 CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
             Timber.w("one key chart eject moveToSsResult: $moveToSsResult")
-            waitPollForOneKey("片仓弹出", 15_000L) {
+            waitPollForOneKey("片仓弹出", 25_000L) {
                 it.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)
             }
         }
@@ -1667,7 +1668,7 @@ class SampleSerialViewModel : ViewModel() {
             val moveToSsResult =
                 CtlCommandsV2.readAllData(CtlCommandsV2.moveIn())
             Timber.w("one key moveInResult: $moveToSsResult")
-            waitPollForOneKey("片仓移入", 15_000L) {
+            waitPollForOneKey("片仓移入", 25_000L) {
                 it.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)
             }
         }
@@ -1677,8 +1678,14 @@ class SampleSerialViewModel : ViewModel() {
         withContext(Dispatchers.IO) {
             val absorbResult = CtlCommandsV2.readAllData(CtlCommandsV2.absorb(milliseconds))
             Timber.w("one key absorbResult: $absorbResult")
-            waitPollForOneKey("吸水10秒", milliseconds + 10_000L) {
+            waitPollForOneKey("吸水10秒", milliseconds + 20_000L) {
                 it.contains(CtlConstantsV2.CMD_ACTION_ABSORB_STATUS_COMPLETED)
+            }
+
+            // 吸水后移入芯片
+            val moveErrorCode = CtlCommandsV2.moveChipInAfterAbsorb()
+            if (moveErrorCode.isNotEmpty()) {
+                throw IOException("吸水后芯片移入失败: $moveErrorCode")
             }
         }
     }
@@ -1693,14 +1700,14 @@ class SampleSerialViewModel : ViewModel() {
             var needReset = scanResult.contains(SCAN_ERROR_NEED_RESET)
             Timber.w("one key scanResult: $scanResult needReset=$needReset")
 
-            waitPollForOneKey("扫描芯片", 30_000L) { result ->
+            waitPollForOneKey("扫描芯片", 40_000L) { result ->
                 if (result.contains(SCAN_ERROR_NEED_RESET)) needReset = true
                 result.contains(CtlConstantsV2.CMD_ACTION_SCAN_STATUS_COMPLETED)
             }
             if (needReset) {
                 val homingResult = CtlCommandsV2.readAllData(CtlCommandsV2.homing())
                 Timber.w("one key homingResult: $homingResult")
-                waitPollForOneKey("片仓复位", 30_000L) { result ->
+                waitPollForOneKey("片仓复位", 45_000L) { result ->
                     CtlConstantsV2.HOMING_STATUS_MAP.any { (key, value) ->
                         value >= CtlConstantsV2.CMD_ACTION_HOMING_STATUS_COMPLETED &&
                                 result.contains("s:$key")
@@ -1709,7 +1716,7 @@ class SampleSerialViewModel : ViewModel() {
                 val moveToSsResult =
                     CtlCommandsV2.readAllData(CtlCommandsV2.moveIn())
                 Timber.w("one key moveInResult: $moveToSsResult")
-                waitPollForOneKey("片仓移入", 15_000L) {
+                waitPollForOneKey("片仓移入", 25_000L) {
                     it.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)
                 }
 
@@ -1719,7 +1726,7 @@ class SampleSerialViewModel : ViewModel() {
                 if (rescannedNeedsReset) {
                     throw IOException("复位后扫描仍然报错: $rescannedResult")
                 }
-                waitPollForOneKey("扫描芯片(复位后)", 30_000L) {
+                waitPollForOneKey("扫描芯片(复位后)", 45_000L) {
                     it.contains(CtlConstantsV2.CMD_ACTION_SCAN_STATUS_COMPLETED)
                 }
             }
@@ -1755,7 +1762,7 @@ class SampleSerialViewModel : ViewModel() {
         }
     }
 
-    private fun waitPollForOneKey(
+    private suspend fun waitPollForOneKey(
         actionName: String,
         timeoutMillis: Long,
         isCompleted: (String) -> Boolean,
@@ -1770,7 +1777,8 @@ class SampleSerialViewModel : ViewModel() {
             if (result.startsWith(CtlConstantsV2.RESULT_SUCCESS_PREFIX) && isCompleted(result)) {
                 return
             }
-            Thread.sleep(CtlCommandsV2.delayMs)
+            // delay 可被取消，点击"取消"后立即结束轮询，不再等到超时
+            delay(CtlCommandsV2.delayMs)
         }
         throw IOException("$actionName 超时")
     }

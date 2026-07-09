@@ -2,6 +2,7 @@ package poct.device.app.serial.v2.ctl
 
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
+import kotlinx.coroutines.delay
 import poct.device.app.App
 import poct.device.app.serial.SerialQueryParams
 import poct.device.app.serial.ctl.CtlConstants
@@ -132,22 +133,23 @@ object CtlCommandsV2 {
         return message
     }
 
-    fun waitMoveDurationStatusSuccess(): Boolean {
-        val cmd = poll()
-        val result = this.readAllData(cmd)
+    suspend fun waitMoveDurationStatusSuccess(): Boolean {
+        while (true) {
+            val result = this.readAllData(poll())
 
-        if (result.isNotEmpty()) {
-            println("waitMoveDurationStatusSuccess result: $result")
+            if (result.isNotEmpty()) {
+                println("waitMoveDurationStatusSuccess result: $result")
 
-            if (isSuccess(result)) {
-                if (result.contains(CtlConstantsV2.CMD_ACTION_MOVE_DURATION_STATUS_COMPLETED)) {
-                    return true
+                if (isSuccess(result)) {
+                    if (result.contains(CtlConstantsV2.CMD_ACTION_MOVE_DURATION_STATUS_COMPLETED)) {
+                        return true
+                    }
                 }
             }
-        }
 
-        Thread.sleep(delayMs)
-        return waitMoveDurationStatusSuccess()
+            // delay 可被取消：取消指令后轮询立即停止
+            delay(delayMs)
+        }
     }
 
     /**
@@ -191,26 +193,96 @@ object CtlCommandsV2 {
         return moveDuration(0, 70000, 250)
     }
 
-    fun waitMoveToSsStatusSuccess(): Boolean {
-        val cmd = poll()
-        val result = this.readAllData(cmd)
+    fun moveUp(): CtlSerialMessageV2 {
+        return moveDuration(1, 60000, 1000)
+    }
 
-        if (result.isNotEmpty()) {
-            println("waitMoveToSsStatusSuccess result: $result")
+    fun moveDown(): CtlSerialMessageV2 {
+        return moveToSs(1, -50000, 2500, 0)
+    }
 
-            if (isSuccess(result)) {
-                if (result.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)) {
-                    return true
-                }
-            }
-        }
+    fun moveOutALittle(): CtlSerialMessageV2 {
+        return moveDuration(0, -50000, 400)
+    }
 
-        Thread.sleep(delayMs)
-        return waitMoveToSsStatusSuccess()
+    fun moveInALittle(): CtlSerialMessageV2 {
+        return moveDuration(0, 50000, 100)
     }
 
     /**
-     * 吸收操作
+     * 轮询等待动作完成或出错
+     * @return 空字符串表示成功，否则为错误码
+     */
+    private fun waitMoveStatusOrError(): String {
+        while (true) {
+            val result = readAllData(poll())
+
+            if (result.isNotEmpty()) {
+                println("waitMoveStatusOrError result: $result")
+
+                if (isSuccess(result)) {
+                    if (result.contains(CtlConstantsV2.CMD_ACTION_MOVE_DURATION_STATUS_COMPLETED)) {
+                        return ""
+                    }
+                    if (result.contains(CtlConstantsV2.CMD_ACTION_STATUS_ERROR)) {
+                        return result
+                    }
+                } else if (result.startsWith(CtlConstantsV2.RESULT_ERROR_PREFIX)) {
+                    return result
+                }
+            }
+
+            Thread.sleep(delayMs)
+        }
+    }
+
+    /**
+     * 吸液后芯片移入：抬起 -> 向内 -> 下压 -> home，每步轮询等待完成
+     * @return 空字符串表示成功，否则为出错步骤及错误码
+     */
+    fun moveChipInAfterAbsorb(): String {
+        val steps = listOf(
+            "moveUp" to moveUp(),
+            "moveOutALittle" to moveOutALittle(),
+            "moveInALittle" to moveInALittle(), // 可能会卡住，先松一下顶针
+            "moveDown" to moveDown(),
+            "moveIn" to moveIn()
+        )
+
+        for ((name, cmd) in steps) {
+            val sendResult = readAllData(cmd)
+            Timber.w("$name result: $sendResult")
+
+            val errorCode = waitMoveStatusOrError()
+            if (errorCode.isNotEmpty()) {
+                Timber.e("$name errorCode: $errorCode")
+                return "$name: $errorCode"
+            }
+        }
+        return ""
+    }
+
+    suspend fun waitMoveToSsStatusSuccess(): Boolean {
+        while (true) {
+            val result = this.readAllData(poll())
+
+            if (result.isNotEmpty()) {
+                println("waitMoveToSsStatusSuccess result: $result")
+
+                if (isSuccess(result)) {
+                    if (result.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)) {
+                        return true
+                    }
+                }
+            }
+
+            // delay 可被取消：取消指令后轮询立即停止
+            delay(delayMs)
+        }
+    }
+
+    /**
+     * 吸水操作
      */
     fun absorb(milliseconds: Int): CtlSerialMessageV2 {
         val message = CtlSerialMessageV2()

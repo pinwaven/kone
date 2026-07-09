@@ -111,7 +111,7 @@ private fun AppDateRangePickerInnerDialog(
     var state by remember { mutableIntStateOf(0) }
     Dialog(onDismissRequest = { onDismissRequest() }) {
         Surface(
-            modifier = Modifier,
+            modifier = Modifier.wakeScreenOnTouch(),
             shape = RoundedCornerShape(8.dp)
         ) {
             Surface(

@@ -33,6 +33,7 @@ import poct.device.app.component.AppFieldWrapper
 import poct.device.app.component.AppFilledButton
 import poct.device.app.component.AppOutlinedButton
 import poct.device.app.component.AppTextField
+import poct.device.app.component.wakeScreenOnTouch
 import poct.device.app.theme.bgColor
 import poct.device.app.theme.tipFontColor
 
@@ -51,7 +52,10 @@ fun WorkConfigCardImportByScanner(
     var scannerContent = scannerInfo.value
     Dialog(onDismissRequest = onCancel) {
         Card(
-            modifier = Modifier.width(280.dp).height(300.dp)
+            modifier = Modifier
+                .wakeScreenOnTouch()
+                .width(280.dp)
+                .height(300.dp)
                 .padding(15.dp),
         ) {
             Column(

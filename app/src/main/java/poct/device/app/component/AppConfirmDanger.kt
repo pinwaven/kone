@@ -56,6 +56,7 @@ fun AppConfirmDanger(
     ) {
         Surface(
             modifier = Modifier
+                .wakeScreenOnTouch()
                 .width(280.dp)
                 .height(160.dp),
             shape = RoundedCornerShape(8.dp)

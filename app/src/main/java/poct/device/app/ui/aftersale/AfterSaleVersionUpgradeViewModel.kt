@@ -180,10 +180,8 @@ class AfterSaleVersionUpgradeViewModel : ViewModel() {
 
                     if (isOk) {
                         record.value = VersionUpgradeInfo(sysInfo = remoteConfigBean)
-                        actionState.value = ActionState(
-                            msg = "开始下载新版本...",
-                            event = EVT_DOWNLOADING
-                        )
+                        // 系统安装界面已接管，清除交互状态；用户取消安装后可重新检查
+                        actionState.value = ActionState.Default
                     }
                 } else {
                     actionState.value =
@@ -559,8 +557,15 @@ class AfterSaleVersionUpgradeViewModel : ViewModel() {
                     }
                 }
 
+                actionState.value = ActionState(
+                    event = EVT_INSTALLING,
+                    msg = "请在系统安装界面完成安装"
+                )
                 // 启动安装界面
                 context.startActivity(intent)
+                // 系统安装界面无法回调取消/完成结果，立即返回，让调用方复位下载状态，
+                // 用户取消安装后可再次下载或安装
+                continuation.resume(true)
             } catch (e: Exception) {
                 Timber.e(e, "安装APK失败")
                 continuation.resume(false)

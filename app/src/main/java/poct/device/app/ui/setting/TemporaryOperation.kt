@@ -64,6 +64,7 @@ import poct.device.app.component.AppScaffold
 import poct.device.app.component.AppSwitch
 import poct.device.app.component.AppTopBar
 import poct.device.app.component.NanoEnvironmentSelector
+import poct.device.app.component.wakeScreenOnTouch
 import poct.device.app.bean.ConfigSysBean
 import poct.device.app.entity.service.SysConfigService
 import poct.device.app.entity.service.TestModeConfigService
@@ -463,6 +464,7 @@ private fun TestModeNumberDialog(
         }
         Surface(
             modifier = Modifier
+                .wakeScreenOnTouch()
                 .width(300.dp)
                 .height(if (rangeText.isEmpty()) 210.dp else 236.dp),
             shape = RoundedCornerShape(8.dp)

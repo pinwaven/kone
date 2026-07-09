@@ -119,6 +119,7 @@ fun AppPDFView(
             ) {
                 Box(
                     modifier = Modifier
+                        .wakeScreenOnTouch()
                         .fillMaxSize()
                         .background(bgColor)
                 ) {

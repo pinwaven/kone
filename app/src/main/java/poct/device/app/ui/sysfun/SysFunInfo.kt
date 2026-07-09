@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,7 +28,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import poct.device.app.R
-import poct.device.app.RouteConfig
 import poct.device.app.bean.ConfigInfoBean
 import poct.device.app.bean.ConfigInfoV2Bean
 import poct.device.app.component.AppAlert
@@ -118,7 +119,6 @@ fun SysFunInfo(navController: NavController, viewModel: SysFunInfoViewModel = vi
             }
         ) {
             SysFunInfoBody(
-                navController = navController,
                 bean = bean,
                 mode = mode,
                 onBeanUpdate = { viewModel.onBeanUpdate(it) }
@@ -175,7 +175,6 @@ fun SysFunInfoInteraction(
  */
 @Composable
 fun SysFunInfoBody(
-    navController: NavController,
 //    bean: ConfigInfoBean,
     bean: ConfigInfoV2Bean,
     mode: String,
@@ -192,6 +191,7 @@ fun SysFunInfoBody(
             modifier = Modifier
                 .fillMaxSize()
                 .background(bgColor)
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 15.dp)
         ) {
             Spacer(modifier = Modifier.height(15.dp))
@@ -275,16 +275,9 @@ fun SysFunInfoBody(
             }
             AppDivider()
             Spacer(modifier = Modifier.height(12.dp))
-            AppFilledButton(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = {
-                    navController.currentBackStackEntry
-                        ?.savedStateHandle
-                        ?.set(SYS_FUN_API_TEST_OPEN_UPGRADE_TAB_KEY, true)
-                    navController.navigate(RouteConfig.SYS_FUN_API_TEST)
-                },
-                text = stringResource(id = R.string.after_sale_version_upgrade)
-            )
+            SysFunInfoUpgradeBlock()
+            Spacer(modifier = Modifier.height(12.dp))
+            SysFunInfoProbeBlock(deviceCode = bean.code)
             AppDivider()
             Spacer(modifier = Modifier.height(12.dp))
         }

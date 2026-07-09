@@ -141,6 +141,7 @@
     <string name="work_f_reagent_id">Test batch number:</string>
     <string name="work_case_put_chip">Input test chip</string>
     <string name="work_case_put_chip_tip">Please push the test chip all the way in</string>
+    <string name="work_move_chip_error">Chip movement error: %1$s</string>
     <string name="work_case_cut_off2_wait">In the sampling response, please click "Next" to start the detection after the countdown ends</string>
     <string name="work_case_wait">Sample reaction</string>
     <string name="work_case_waiting">Sample is being processed (S)…</string>
@@ -383,6 +384,8 @@
     <string name="sys_fun_menu_device">Device Info</string>
     <string name="sys_fun_api_test_menu">API Test</string>
     <string name="sys_fun_api_test_title">Nano API Test</string>
+    <string name="sys_fun_api_test_tab_probe">Connection Test</string>
+    <string name="sys_fun_api_test_tab_upgrade">APK Upgrade</string>
     <string name="sys_fun_api_test_url">Nano URL</string>
     <string name="sys_fun_api_test_device_id">Nano Device ID</string>
     <string name="sys_fun_api_test_flow">Test flow</string>
@@ -395,6 +398,14 @@
     <string name="sys_fun_api_test_latency">Latency</string>
     <string name="sys_fun_api_test_error">Error</string>
     <string name="sys_fun_api_test_body">Response body</string>
+    <string name="sys_fun_api_upgrade_title">APK Upgrade</string>
+    <string name="sys_fun_api_upgrade_local_version">Current version</string>
+    <string name="sys_fun_api_upgrade_btn">Check Version</string>
+    <string name="sys_fun_api_upgrade_checking">Checking…</string>
+    <string name="sys_fun_api_upgrade_latest">Already up to date</string>
+    <string name="sys_fun_api_upgrade_available">New version available</string>
+    <string name="sys_fun_api_upgrade_go">Upgrade Now</string>
+    <string name="sys_fun_api_upgrade_error">Check failed</string>
     <string name="sys_fun_system">System Info</string>
     <string name="sys_fun_system_config">System Config</string>
     <string name="sys_fun_xtpz">Function configuration</string>

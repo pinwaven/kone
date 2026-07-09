@@ -61,7 +61,8 @@ class TestModePointChartDataTest {
                         CasePoint(140.0, 1.0),
                         CasePoint(160.0, 0.0),
                 )
-        val region = TestModePointChartData.findSlopeRegions(points).first()
+        val region =
+                TestModePointChartData.findSlopeRegions(points, minPeakTroughYDiff = 5.0).first()
 
         val entrySets = TestModePointChartData.toEntrySets(points, listOf(region))
 
@@ -115,7 +116,8 @@ class TestModePointChartDataTest {
                                 CasePoint(120.0, 11.0),
                                 CasePoint(140.0, 1.0),
                                 CasePoint(160.0, 0.0),
-                        )
+                        ),
+                        minPeakTroughYDiff = 5.0,
                 )
 
         assertEquals(1, regions.size)
@@ -138,7 +140,8 @@ class TestModePointChartDataTest {
                                 CasePoint(120.0, 10.5),
                                 CasePoint(140.0, 10.2),
                                 CasePoint(160.0, 10.1),
-                        )
+                        ),
+                        minPeakTroughYDiff = 5.0,
                 )
 
         assertTrue(regions.isEmpty())
@@ -160,7 +163,8 @@ class TestModePointChartDataTest {
                                 CasePoint(160.0, 20.0),
                                 CasePoint(180.0, 10.0),
                                 CasePoint(200.0, 9.0),
-                        )
+                        ),
+                        minPeakTroughYDiff = 5.0,
                 )
 
         assertEquals(1, regions.size)
@@ -185,7 +189,8 @@ class TestModePointChartDataTest {
                                 CasePoint(160.0, 29.5),
                                 CasePoint(180.0, 29.0),
                                 CasePoint(200.0, 29.0),
-                        )
+                        ),
+                        minPeakTroughYDiff = 5.0,
                 )
 
         assertEquals(1, regions.size)
@@ -225,7 +230,8 @@ class TestModePointChartDataTest {
                                 CasePoint(140.0, 10.0),
                                 CasePoint(160.0, 9.0),
                                 CasePoint(180.0, 9.0),
-                        )
+                        ),
+                        minPeakTroughYDiff = 5.0,
                 )
 
         assertEquals(1, regions.size)
@@ -263,7 +269,8 @@ class TestModePointChartDataTest {
                                 CasePoint(320.0, 5.0),
                                 CasePoint(340.0, 4.5),
                                 CasePoint(360.0, 4.5),
-                        )
+                        ),
+                        minPeakTroughYDiff = 5.0,
                 )
 
         assertEquals("Both regions must be detected", 2, regions.size)
@@ -292,7 +299,8 @@ class TestModePointChartDataTest {
                                 CasePoint(200.0, 0.4),  // steep drop (slope ≈ -0.375)
                                 CasePoint(220.0, 0.1),  // near-flat (slope = -0.015) — true end
                                 CasePoint(240.0, 0.1),
-                        )
+                        ),
+                        minPeakTroughYDiff = 5.0,
                 )
 
         assertEquals(1, regions.size)
@@ -318,7 +326,8 @@ class TestModePointChartDataTest {
                                 CasePoint(140.0, 4.5),
                                 CasePoint(160.0, 3.5),
                                 CasePoint(180.0, 3.5),
-                        )
+                        ),
+                        minPeakTroughYDiff = 5.0,
                 )
 
         assertEquals(1, regions.size)
@@ -353,7 +362,8 @@ class TestModePointChartDataTest {
                                 CasePoint(440.0, 2.0),  // deeper min beyond boundary
                                 CasePoint(480.0, 2.5),
                                 CasePoint(500.0, 8.0),  // upswing — findMinInFlatTail breaks here
-                        )
+                        ),
+                        minPeakTroughYDiff = 5.0,
                 )
 
         assertEquals(1, regions.size)
@@ -378,12 +388,71 @@ class TestModePointChartDataTest {
                                 CasePoint(140.0, 6.0),
                                 CasePoint(160.0, 4.0),
                                 CasePoint(200.0, 4.5),
-                        )
+                        ),
+                        minPeakTroughYDiff = 5.0,
                 )
 
         assertEquals(1, regions.size)
         assertEquals(3, regions[0].endIndex)
         assertEquals(120.0, regions[0].endPoint.x, 0.0)
+    }
+
+    @Test
+    fun findSlopeRegionsFiltersWavesWithPeakTroughDiffBelowDefaultThreshold() {
+        // Same shape as findSlopeRegionsUsesPeakAndFlatSlopeBoundaries (amplitude 30),
+        // but with the default threshold of 50 the wave must be filtered out.
+        val regions =
+                TestModePointChartData.findSlopeRegions(
+                        listOf(
+                                CasePoint(0.0, 0.0),
+                                CasePoint(20.0, 1.0),
+                                CasePoint(40.0, 11.0),
+                                CasePoint(60.0, 21.0),
+                                CasePoint(80.0, 31.0),
+                                CasePoint(100.0, 21.0),
+                                CasePoint(120.0, 11.0),
+                                CasePoint(140.0, 1.0),
+                                CasePoint(160.0, 0.0),
+                        )
+                )
+
+        assertTrue(regions.isEmpty())
+    }
+
+    @Test
+    fun findSlopeRegionsExtendsStartPastSmallLeftWaveAndRecalculatesEnd() {
+        // A small wave (amplitude 30 < 50) sits left of the main wave and is filtered out.
+        // The main wave's start must extend left past it to x=0. The MAX_REGION_X_DISTANCE
+        // clamp is measured from the rise start (x=200), not the extended start, so the
+        // end stays at the true trough (x=340) instead of being clamped back to x=320.
+        val regions =
+                TestModePointChartData.findSlopeRegions(
+                        listOf(
+                                CasePoint(0.0, 2.0),
+                                CasePoint(20.0, 12.0),
+                                CasePoint(40.0, 32.0),   // small wave peak
+                                CasePoint(60.0, 12.0),
+                                CasePoint(80.0, 4.0),
+                                CasePoint(120.0, 3.5),
+                                CasePoint(160.0, 3.0),
+                                CasePoint(200.0, 3.0),   // trough where the left walk stops
+                                CasePoint(220.0, 53.0),
+                                CasePoint(240.0, 103.0),
+                                CasePoint(260.0, 153.0), // main peak
+                                CasePoint(280.0, 103.0),
+                                CasePoint(300.0, 53.0),
+                                CasePoint(320.0, 3.0),
+                                CasePoint(340.0, 2.0),
+                                CasePoint(360.0, 2.0),
+                        )
+                )
+
+        assertEquals(1, regions.size)
+        assertEquals(0, regions[0].startIndex)
+        assertEquals(0.0, regions[0].startPoint.x, 0.0)
+        assertEquals(260.0, regions[0].peakPoint.x, 0.0)
+        assertEquals(14, regions[0].endIndex)
+        assertEquals(340.0, regions[0].endPoint.x, 0.0)
     }
 
 }

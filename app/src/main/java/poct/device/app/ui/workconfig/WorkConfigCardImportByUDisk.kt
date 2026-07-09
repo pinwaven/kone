@@ -40,6 +40,7 @@ import poct.device.app.bean.FileInfo
 import poct.device.app.component.AppFilledButton
 import poct.device.app.component.AppList
 import poct.device.app.component.AppOutlinedButton
+import poct.device.app.component.wakeScreenOnTouch
 import poct.device.app.theme.bgColor
 import poct.device.app.theme.fontColor
 import poct.device.app.theme.primaryColor
@@ -62,7 +63,9 @@ fun WorkConfigCardImportByUDisk(
     var stepValue = step.value
     Dialog(onDismissRequest = onCancel) {
         Card(
-            modifier = Modifier.size(280.dp)
+            modifier = Modifier
+                .wakeScreenOnTouch()
+                .size(280.dp)
         ) {
             if (stepValue == WorkConfigCardViewModel.STEP_IMPORT_CHECK) {
                 WorkConfigCardImportByUDiskCheck()

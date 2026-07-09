@@ -1034,6 +1034,26 @@ class WorkMainViewModel : ViewModel() {
                             // 等待进度更新完成
                             progressJob.await()
                         }
+
+                        // 吸液完成后移入芯片
+                        val moveErrorCode =
+                                withContext(Dispatchers.IO) {
+                                    CtlCommandsV2.moveChipInAfterAbsorb()
+                                }
+                        if (moveErrorCode.isNotEmpty()) {
+                            Timber.e("moveChipInAfterAbsorb error: $moveErrorCode")
+                            actionState.value =
+                                    ActionState(
+                                            EVT_DEV_ERROR,
+                                            App.getContext()
+                                                    .getString(
+                                                            R.string.work_move_chip_error,
+                                                            moveErrorCode
+                                                    )
+                                    )
+                            onClearInteraction()
+                            return@launch
+                        }
                     } else {
                         progress.value = 49F
                     }

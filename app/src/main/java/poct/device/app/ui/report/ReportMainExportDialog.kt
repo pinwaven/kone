@@ -21,6 +21,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import poct.device.app.R
 import poct.device.app.component.AppAlert
+import poct.device.app.component.wakeScreenOnTouch
 import poct.device.app.theme.filledFontColor
 import poct.device.app.theme.fontColor
 
@@ -50,6 +51,7 @@ fun ReportMainExportDialog(
         ) {
             Surface(
                 modifier = Modifier
+                    .wakeScreenOnTouch()
                     .width(180.dp)
                     .height(170.dp),
                 shape = RoundedCornerShape(4.dp)

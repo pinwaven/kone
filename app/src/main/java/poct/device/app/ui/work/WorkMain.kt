@@ -150,18 +150,6 @@ fun WorkMain(navController: NavController, viewModel: WorkMainViewModel = viewMo
                     onHome = {
                         handleHomeClick()
                     },
-                    trailingContent = if (ConfigSysBean.isNanoFlow(sysConfig.value.flow)) ({
-                        Text(
-                            text = "NANO",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(filledFontColor)
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        )
-                    }) else null,
                 )
             },
             bottomBar = {

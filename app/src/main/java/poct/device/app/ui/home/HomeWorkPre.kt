@@ -42,6 +42,7 @@ import poct.device.app.component.AppAlert
 import poct.device.app.component.AppConfirm
 import poct.device.app.component.AppFilledButton
 import poct.device.app.component.AppPreviewWrapper
+import poct.device.app.component.wakeScreenOnTouch
 import poct.device.app.theme.filledFontColor
 import poct.device.app.theme.fontColor
 import poct.device.app.theme.primaryColor
@@ -66,6 +67,7 @@ fun HomeWorkPre(
     Dialog(onDismissRequest = {}) {
         Surface(
             modifier = Modifier
+                .wakeScreenOnTouch()
                 .width(280.dp)
                 .height(280.dp),
             shape = RoundedCornerShape(8.dp)

@@ -62,6 +62,7 @@ fun AppQRCodeAlert(
     ) {
         Surface(
             modifier = Modifier
+                .wakeScreenOnTouch()
                 .width(300.dp)
                 .height(300.dp),
             shape = RoundedCornerShape(8.dp)

@@ -42,6 +42,7 @@ fun AppViewError(
     Dialog(onDismissRequest = { }) {
         Card(
             modifier = Modifier
+                .wakeScreenOnTouch()
                 .width(220.dp)
                 .height(200.dp),
         ) {
