@@ -101,8 +101,16 @@ class WorkMainViewModel : ViewModel() {
 
     val showCutOff2Time = MutableStateFlow(true)
     val skipCurrentCutOff2Wait = MutableStateFlow(false)
+
+    // xt1>0：倒计时前先移入芯片，移入过程中显示加载
+    val isChipMovingIn = MutableStateFlow(false)
+
     fun onCutOff2TimeFinished() {
         showCutOff2Time.value = false
+        // xt1>0：芯片已提前移入，倒计时结束后自动开始下一步，无需点击下一步
+        if ((cardConfig?.xt1 ?: 0) > 0 && action.value == ACTION_WORK) {
+            doNext()
+        }
     }
 
     fun onSkipCutOff2WaitAndStartDetection() {
@@ -225,6 +233,7 @@ class WorkMainViewModel : ViewModel() {
         workFlow = WorkFlowV2.EMPTY
         continueSacn.value = true
         isChipRetryUsed = false
+        isChipMovingIn.value = false
     }
 
     fun onDataDetail(record: CaseBean, callback: () -> Unit = {}) {
@@ -487,6 +496,22 @@ class WorkMainViewModel : ViewModel() {
                             }
 
                             doNext()
+                        } else if (it.action == ACTION_WORK &&
+                                        (cardConfig?.xt1 ?: 0) > 0
+                        ) {
+                            // xt1>0：先移入芯片再开始倒计时；倒计时结束后自动进入下一步
+                            isChipMovingIn.value = true
+                            withContext(Dispatchers.IO) {
+                                val moveToSsResult =
+                                        CtlCommandsV2.readAllData(
+                                                CtlCommandsV2.moveIn()
+                                        )
+                                Timber.d("moveToSsResult: $moveToSsResult")
+
+                                // 等待成功
+                                CtlCommandsV2.waitMoveToSsStatusSuccess()
+                            }
+                            isChipMovingIn.value = false
                         }
                     }
                 }

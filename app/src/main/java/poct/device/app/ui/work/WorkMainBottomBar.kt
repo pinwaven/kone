@@ -40,6 +40,7 @@ fun WorkMainBottomBar(
     onActionContinueConfirm: () -> Unit = {},
     onActionWorkPre: () -> Unit = {},
     onActionWorkNext: () -> Unit = {},
+    workNextVisible: Boolean = true,
     onActionReportGet: () -> Unit = {},
     onActionReportPre: () -> Unit = {},
     onActionReportContinue: () -> Unit = {},
@@ -185,15 +186,18 @@ fun WorkMainBottomBar(
                     onClick = { onActionWorkPre() },
                     text = stringResource(id = R.string.btn_label_previous)
                 )
-                Spacer(modifier = Modifier.width(10.dp))
-                AppFilledButton(
-                    modifier = Modifier
-                        .width(120.dp)
-                        .height(40.dp),
-                    fontSize = 14.sp,
-                    onClick = { onActionWorkNext() },
-                    text = stringResource(id = R.string.btn_label_next)
-                )
+                // xt1>0：倒计时结束自动进入下一步，不显示下一步按钮
+                if (workNextVisible) {
+                    Spacer(modifier = Modifier.width(10.dp))
+                    AppFilledButton(
+                        modifier = Modifier
+                            .width(120.dp)
+                            .height(40.dp),
+                        fontSize = 14.sp,
+                        onClick = { onActionWorkNext() },
+                        text = stringResource(id = R.string.btn_label_next)
+                    )
+                }
             }
 
             WorkMainViewModel.ACTION_WORK_PROCESS -> {

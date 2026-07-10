@@ -41,10 +41,17 @@ import poct.device.app.theme.fontColor
 @Composable
 fun WorkMainActionWorkBlockV2(
     cardConfigBean: State<CardConfig>,
+    chipMovingIn: Boolean = false,
     skipCutOff2Wait: Boolean = false,
     onSkipCutOff2Wait: () -> Unit = {},
     onCutOff2TimeFinished: () -> Unit = {}
 ) {
+    // xt1>0：先移入芯片，移入完成后才开始倒计时
+    if (chipMovingIn) {
+        AppViewLoading(msg = stringResource(id = R.string.work_chip_moving_in))
+        return
+    }
+
     if (skipCutOff2Wait) {
         LaunchedEffect(Unit) {
             onSkipCutOff2Wait()
@@ -101,12 +108,15 @@ fun WorkMainActionWorkBlockV2(
                         fontWeight = FontWeight.Bold,
                         color = fontColor,
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(id = R.string.work_case_cut_off2_wait),
-                        fontSize = 14.sp,
-                        color = fontColor,
-                    )
+                    // xt1>0：倒计时结束后自动开始检测，不显示"点击下一步"提示
+                    if (cardConfigBean.value.xt1 <= 0) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(id = R.string.work_case_cut_off2_wait),
+                            fontSize = 14.sp,
+                            color = fontColor,
+                        )
+                    }
                 } else {
                     onCutOff2TimeFinished()
                 }

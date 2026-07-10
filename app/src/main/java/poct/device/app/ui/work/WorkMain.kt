@@ -170,6 +170,8 @@ fun WorkMain(navController: NavController, viewModel: WorkMainViewModel = viewMo
                     onActionContinueConfirm = { viewModel.onActionContinueConfirm() },
                     onActionWorkPre = { viewModel.onActionWorkPre() },
                     onActionWorkNext = { viewModel.onActionWorkNext() },
+                    // xt1>0：倒计时结束自动进入下一步，隐藏下一步按钮
+                    workNextVisible = curCardConfig.value.xt1 <= 0,
                     onActionReportGet = {
                         viewModel.onActionReportGet()
 //                        viewModel.onActionReportGen()
@@ -447,6 +449,7 @@ fun WorkMainBody(
 //            )
             WorkMainViewModel.ACTION_WORK -> WorkMainActionWorkBlockV2(
                 cardConfigBean,
+                chipMovingIn = viewModel.isChipMovingIn.collectAsState().value,
                 skipCutOff2Wait = skipCurrentCutOff2Wait.value,
                 onSkipCutOff2Wait = { viewModel.onSkipCutOff2WaitAndStartDetection() },
             ) { viewModel.onCutOff2TimeFinished() }
