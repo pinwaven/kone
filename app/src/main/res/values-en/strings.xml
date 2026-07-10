@@ -140,7 +140,7 @@
     <string name="work_f_case_time">Test time:</string>
     <string name="work_f_reagent_id">Test batch number:</string>
     <string name="work_case_put_chip">Input test chip</string>
-    <string name="work_case_put_chip_tip">Chip not detected. Please make sure the "chip" has been pushed all the way "in".</string>
+    <string name="work_case_put_chip_tip">Chip not detected. Please make sure the "chip" has been pushed all the way to the bottom.</string>
     <string name="work_chip_fully_inserted">Already Fully Inserted</string>
     <string name="work_move_chip_error">Chip movement error: %1$s</string>
     <string name="work_chip_moving_in">Loading the chip…</string>
