@@ -114,10 +114,10 @@ fun HomeWorkPre(
                     viewModel.onReset()
                 }
             }
-            // 关闭按钮
+            // 关闭按钮：退出时取消初始化指令
             HomeWorkPreCloseAction {
+                viewModel.onExit()
                 onClose()
-                viewModel.onReset()
             }
         }
     }

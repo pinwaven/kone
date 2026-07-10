@@ -3,6 +3,7 @@ package poct.device.app.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -25,9 +26,22 @@ class HomeWorkPreViewModel : ViewModel() {
     // 进度 0-100
     val progress = MutableStateFlow(0)
 
+    private var initJob: Job? = null
+
     fun onReset() {
         step.value = 1
         progress.value = 0
+    }
+
+    // 退出初始化：停止轮询并向硬件发送取消指令
+    fun onExit() {
+        initJob?.cancel()
+        initJob = null
+        viewModelScope.launch(Dispatchers.IO) {
+            val cancelResult = CtlCommandsV2.readAllData(CtlCommandsV2.cancel())
+            Timber.w("init exit cancelResult: $cancelResult")
+        }
+        onReset()
     }
 
     // 步骤1：试剂确认
@@ -64,7 +78,7 @@ class HomeWorkPreViewModel : ViewModel() {
 //        } else {
         step.value++
 
-        viewModelScope.launch {
+        initJob = viewModelScope.launch {
             delay(500)
 
             val sysConfig = withContext(Dispatchers.IO) {
@@ -94,7 +108,6 @@ class HomeWorkPreViewModel : ViewModel() {
 
             App.getSerialHelper().reconnect()
         }
-//        }
     }
 
     private suspend fun homingSuccess() {
