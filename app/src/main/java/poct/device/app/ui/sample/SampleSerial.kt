@@ -1090,6 +1090,7 @@ class SampleSerialViewModel : ViewModel() {
 
                 val result = CtlCommandsV2.readAllData(CtlCommandsV2.scan(SCAN_VELOCITY, SCAN_DURATION_MS))
 
+                println("scan result: $result")
                 withContext(Dispatchers.Main) {
                     text.value =
                         ("扫描 $result")
@@ -1420,7 +1421,7 @@ class SampleSerialViewModel : ViewModel() {
         runScrewTestCommand("向上") {
             val result = CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(1, 60000, 1000))
             Timber.w("screw up result: $result")
-            waitPollForScrewTest("向上", 3_000L) {
+            waitPollForScrewTest("向上", 5_000L) {
                 it.contains(CtlConstantsV2.CMD_ACTION_MOVE_DURATION_STATUS_COMPLETED)
             }
         }
@@ -1430,7 +1431,7 @@ class SampleSerialViewModel : ViewModel() {
         runScrewTestCommand("向下") {
             val result = CtlCommandsV2.readAllData(CtlCommandsV2.moveToSs(1, -50000, 2500, 0))
             Timber.w("screw down result: $result")
-            waitPollForScrewTest("向下", 5_000L) {
+            waitPollForScrewTest("向下", 8_000L) {
                 it.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)
             }
         }
@@ -1621,7 +1622,7 @@ class SampleSerialViewModel : ViewModel() {
     private suspend fun moveBackForScrewTest() {
         val result = CtlCommandsV2.readAllData(CtlCommandsV2.moveIn())
         Timber.w("screw back result: $result")
-        waitPollForScrewTest("移入", 15_000L) {
+        waitPollForScrewTest("移入", 25_000L) {
             it.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)
         }
     }
