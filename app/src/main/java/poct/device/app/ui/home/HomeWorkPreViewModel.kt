@@ -13,7 +13,6 @@ import poct.device.app.bean.ConfigSysBean
 import poct.device.app.entity.User
 import poct.device.app.entity.service.SysConfigService
 import poct.device.app.serial.v2.ctl.CtlCommandsV2
-import poct.device.app.serial.v2.ctl.CtlConstantsV2
 import timber.log.Timber
 
 class HomeWorkPreViewModel : ViewModel() {
@@ -98,42 +97,30 @@ class HomeWorkPreViewModel : ViewModel() {
 //        }
     }
 
-    private fun homingSuccess() {
-        CtlCommandsV2.processHomingStatus { homingSuccessCustomFunction(it) }
-    }
+    private suspend fun homingSuccess() {
+        withContext(Dispatchers.IO) {
+            CtlCommandsV2.waitHomingStatusSuccess { progress.value = it }
 
-    private fun homingSuccessCustomFunction(progressVal: Int) {
-        viewModelScope.launch {
-            progress.value = progressVal
+            // 负弹出，正进入
+            val moveToSsResult =
+                CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
+            Timber.d("moveToSsResult: $moveToSsResult")
 
-            if (progressVal < CtlConstantsV2.CMD_ACTION_HOMING_STATUS_COMPLETED) {
-                withContext(Dispatchers.IO) {
-                    homingSuccess()
-                }
-            } else {
-                // 负弹出，正进入
-                withContext(Dispatchers.IO) {
-                    val moveToSsResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
-                    Timber.d("moveToSsResult: $moveToSsResult")
+            // 等待成功
+            CtlCommandsV2.waitMoveToSsStatusSuccess()
 
-                    // 等待成功
-                    CtlCommandsV2.waitMoveToSsStatusSuccess()
+            progress.value = 95
 
-                    progress.value = 95
+            val moveDurationResult =
+                CtlCommandsV2.readAllData(CtlCommandsV2.closeDoor())
+            Timber.w("moveDurationResult: $moveDurationResult")
 
-                    val moveDurationResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.closeDoor())
-                    Timber.w("moveDurationResult: $moveDurationResult")
-
-                    // 等待成功
-                    CtlCommandsV2.waitMoveDurationStatusSuccess()
-                }
-
-                progress.value = 100
-                AppParams.initState = true
-                step.value++
-            }
+            // 等待成功
+            CtlCommandsV2.waitMoveDurationStatusSuccess()
         }
+
+        progress.value = 100
+        AppParams.initState = true
+        step.value++
     }
 }

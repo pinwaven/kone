@@ -15,10 +15,4 @@ class OneKeyTestStepsTest {
         assertEquals("片仓移入", steps[3].label)
     }
 
-    @Test
-    fun `pollQrCodeResult polls until first non-empty value`() {
-        val responses = ArrayDeque(listOf("", "", "QR-TEST-123"))
-        val result = pollQrCodeResult { responses.removeFirst() }
-        assertEquals("QR-TEST-123", result)
-    }
 }

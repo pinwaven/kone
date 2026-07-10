@@ -11,18 +11,28 @@ import poct.device.app.serial.v2.utils.SocketSidUtils
 import timber.log.Timber
 
 /**
+ * 轮询等待结果
+ */
+sealed interface WaitResult {
+    object Completed : WaitResult
+    data class DeviceError(val raw: String) : WaitResult
+    object Timeout : WaitResult
+}
+
+/**
  * 指令生成帮助类
  */
 object CtlCommandsV2 {
-    var homingProgressVal = 10
-
-    var isWaitScanStatusSuccessCancel = false
-
-    var isWaitAbsorbStatusSuccessCancel = false
-
     val EMPTY = CtlSerialMessageV2()
 
     val delayMs: Long = 150
+
+    // 各类动作的轮询超时时间：超时后停止轮询并发送取消指令，避免卡死后续指令
+    const val MOVE_TIMEOUT_MS = 30_000L
+    const val ABSORB_TIMEOUT_MS = 300_000L
+    const val SCAN_TIMEOUT_MS = 60_000L
+    const val HOMING_TIMEOUT_MS = 60_000L
+    const val READ_QR_TIMEOUT_MS = 30_000L
 
     /**
      * 系统状态轮询
@@ -81,34 +91,46 @@ object CtlCommandsV2 {
         return message
     }
 
-    fun processHomingStatus(customFunction: (progressVal: Int) -> Unit) {
-        val cmd = poll()
-        val result = this.readAllData(cmd)
+    /**
+     * 轮询等待归零完成；delay 可被取消，取消后轮询立即停止
+     * @param onProgress 进度回调（HOMING_STATUS_MAP 中的进度值）
+     * @return true 表示归零完成，false 表示出错或超时
+     */
+    suspend fun waitHomingStatusSuccess(
+        timeoutMs: Long = HOMING_TIMEOUT_MS,
+        onProgress: (progressVal: Int) -> Unit = {},
+    ): Boolean {
+        val startTime = System.currentTimeMillis()
+        while (System.currentTimeMillis() - startTime <= timeoutMs) {
+            val result = this.readAllData(poll())
 
-        if (result.isNotEmpty()) {
-            println("processHomingStatus result: $result")
+            if (result.isNotEmpty()) {
+                println("waitHomingStatusSuccess result: $result")
 
-            var resultStatus = ""
-            if (isSuccess(result)) {
-                for (key in CtlConstantsV2.HOMING_STATUS_RESULT_MAP.keys) {
-                    if (result.contains("m:$key")) {
-                        resultStatus = CtlConstantsV2.HOMING_STATUS_RESULT_MAP[key]!!
-                        break
+                if (isSuccess(result)) {
+                    for (key in CtlConstantsV2.HOMING_STATUS_MAP.keys) {
+                        if (result.contains("s:$key")) {
+                            val progressVal = CtlConstantsV2.HOMING_STATUS_MAP[key]!!
+                            Timber.w("homing status: $key progressVal: $progressVal")
+                            onProgress(progressVal)
+                            if (progressVal >= CtlConstantsV2.CMD_ACTION_HOMING_STATUS_COMPLETED) {
+                                return true
+                            }
+                            break
+                        }
                     }
-                }
-
-                for (key in CtlConstantsV2.HOMING_STATUS_MAP.keys) {
-                    if (result.contains("s:$key")) {
-                        homingProgressVal = CtlConstantsV2.HOMING_STATUS_MAP[key]!!
-                        Timber.w("status: $key statusVal: $resultStatus")
-                        break
-                    }
+                } else if (result.startsWith(CtlConstantsV2.RESULT_ERROR_PREFIX)) {
+                    Timber.e("waitHomingStatusSuccess device error: $result")
+                    return false
                 }
             }
+
+            delay(delayMs)
         }
 
-        Thread.sleep(delayMs)
-        customFunction(homingProgressVal)
+        Timber.e("waitHomingStatusSuccess timeout ${timeoutMs}ms, sending cancel")
+        readAllData(cancel())
+        return false
     }
 
     /**
@@ -133,23 +155,45 @@ object CtlCommandsV2 {
         return message
     }
 
-    suspend fun waitMoveDurationStatusSuccess(): Boolean {
-        while (true) {
-            val result = this.readAllData(poll())
+    /**
+     * 通用轮询等待：完成、设备出错或超时必定返回，不会永久阻塞后续指令。
+     * delay 可被取消：取消指令后轮询立即停止；超时后发送取消指令，避免设备停留在动作中。
+     */
+    private suspend fun waitStatus(completedToken: String, timeoutMs: Long): WaitResult {
+        val startTime = System.currentTimeMillis()
+        while (System.currentTimeMillis() - startTime <= timeoutMs) {
+            val result = readAllData(poll())
 
             if (result.isNotEmpty()) {
-                println("waitMoveDurationStatusSuccess result: $result")
+                println("waitStatus result: $result")
 
                 if (isSuccess(result)) {
-                    if (result.contains(CtlConstantsV2.CMD_ACTION_MOVE_DURATION_STATUS_COMPLETED)) {
-                        return true
+                    if (result.contains(completedToken)) {
+                        return WaitResult.Completed
                     }
+                    if (result.contains(CtlConstantsV2.CMD_ACTION_STATUS_ERROR)) {
+                        Timber.e("waitStatus device error: $result")
+                        return WaitResult.DeviceError(result)
+                    }
+                } else if (result.startsWith(CtlConstantsV2.RESULT_ERROR_PREFIX)) {
+                    Timber.e("waitStatus device error: $result")
+                    return WaitResult.DeviceError(result)
                 }
             }
 
-            // delay 可被取消：取消指令后轮询立即停止
             delay(delayMs)
         }
+
+        Timber.e("waitStatus timeout ${timeoutMs}ms waiting $completedToken, sending cancel")
+        readAllData(cancel())
+        return WaitResult.Timeout
+    }
+
+    suspend fun waitMoveDurationStatusSuccess(timeoutMs: Long = MOVE_TIMEOUT_MS): Boolean {
+        return waitStatus(
+            CtlConstantsV2.CMD_ACTION_MOVE_DURATION_STATUS_COMPLETED,
+            timeoutMs
+        ) == WaitResult.Completed
     }
 
     /**
@@ -210,37 +254,10 @@ object CtlCommandsV2 {
     }
 
     /**
-     * 轮询等待动作完成或出错
-     * @return 空字符串表示成功，否则为错误码
-     */
-    private fun waitMoveStatusOrError(): String {
-        while (true) {
-            val result = readAllData(poll())
-
-            if (result.isNotEmpty()) {
-                println("waitMoveStatusOrError result: $result")
-
-                if (isSuccess(result)) {
-                    if (result.contains(CtlConstantsV2.CMD_ACTION_MOVE_DURATION_STATUS_COMPLETED)) {
-                        return ""
-                    }
-                    if (result.contains(CtlConstantsV2.CMD_ACTION_STATUS_ERROR)) {
-                        return result
-                    }
-                } else if (result.startsWith(CtlConstantsV2.RESULT_ERROR_PREFIX)) {
-                    return result
-                }
-            }
-
-            Thread.sleep(delayMs)
-        }
-    }
-
-    /**
      * 吸液后芯片移入：抬起 -> 向内 -> 下压 -> home，每步轮询等待完成
      * @return 空字符串表示成功，否则为出错步骤及错误码
      */
-    fun moveChipInAfterAbsorb(): String {
+    suspend fun moveChipInAfterAbsorb(): String {
         val steps = listOf(
             "moveUp" to moveUp(),
             "moveOutALittle" to moveOutALittle(),
@@ -253,32 +270,30 @@ object CtlCommandsV2 {
             val sendResult = readAllData(cmd)
             Timber.w("$name result: $sendResult")
 
-            val errorCode = waitMoveStatusOrError()
-            if (errorCode.isNotEmpty()) {
-                Timber.e("$name errorCode: $errorCode")
-                return "$name: $errorCode"
+            val waitResult = waitStatus(
+                CtlConstantsV2.CMD_ACTION_MOVE_DURATION_STATUS_COMPLETED,
+                MOVE_TIMEOUT_MS
+            )
+            when (waitResult) {
+                is WaitResult.Completed -> Unit
+                is WaitResult.DeviceError -> {
+                    Timber.e("$name errorCode: ${waitResult.raw}")
+                    return "$name: ${waitResult.raw}"
+                }
+                is WaitResult.Timeout -> {
+                    Timber.e("$name timeout")
+                    return "$name: timeout"
+                }
             }
         }
         return ""
     }
 
-    suspend fun waitMoveToSsStatusSuccess(): Boolean {
-        while (true) {
-            val result = this.readAllData(poll())
-
-            if (result.isNotEmpty()) {
-                println("waitMoveToSsStatusSuccess result: $result")
-
-                if (isSuccess(result)) {
-                    if (result.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)) {
-                        return true
-                    }
-                }
-            }
-
-            // delay 可被取消：取消指令后轮询立即停止
-            delay(delayMs)
-        }
+    suspend fun waitMoveToSsStatusSuccess(timeoutMs: Long = MOVE_TIMEOUT_MS): Boolean {
+        return waitStatus(
+            CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED,
+            timeoutMs
+        ) == WaitResult.Completed
     }
 
     /**
@@ -298,29 +313,11 @@ object CtlCommandsV2 {
         return message
     }
 
-    fun waitAbsorbStatusSuccess(): Boolean {
-        val cmd = poll()
-        val result = this.readAllData(cmd)
-
-        if (result.isNotEmpty()) {
-            println("waitAbsorbStatusSuccess result: $result")
-
-            if (isSuccess(result)) {
-                if (result.contains(CtlConstantsV2.CMD_ACTION_ABSORB_STATUS_COMPLETED)) {
-                    return true
-                }
-            }
-        }
-
-        Thread.sleep(delayMs)
-
-        if (!isWaitAbsorbStatusSuccessCancel) {
-            return waitAbsorbStatusSuccess()
-        } else {
-            val cancelResult = readAllData(cancel())
-            Timber.w("cancelResult: $cancelResult")
-            return false
-        }
+    suspend fun waitAbsorbStatusSuccess(timeoutMs: Long = ABSORB_TIMEOUT_MS): Boolean {
+        return waitStatus(
+            CtlConstantsV2.CMD_ACTION_ABSORB_STATUS_COMPLETED,
+            timeoutMs
+        ) == WaitResult.Completed
     }
 
     /**
@@ -377,29 +374,11 @@ object CtlCommandsV2 {
         return message
     }
 
-    fun waitScanStatusSuccess(): Boolean {
-        val cmd = poll()
-        val result = this.readAllData(cmd)
-
-        if (result.isNotEmpty()) {
-            println("waitScanStatusSuccess result: $result")
-
-            if (isSuccess(result)) {
-                if (result.contains(CtlConstantsV2.CMD_ACTION_SCAN_STATUS_COMPLETED)) {
-                    return true
-                }
-            }
-        }
-
-        Thread.sleep(delayMs)
-
-        if (!isWaitScanStatusSuccessCancel) {
-            return waitScanStatusSuccess()
-        } else {
-            val cancelResult = readAllData(cancel())
-            Timber.w("cancelResult: $cancelResult")
-            return false
-        }
+    suspend fun waitScanStatusSuccess(timeoutMs: Long = SCAN_TIMEOUT_MS): Boolean {
+        return waitStatus(
+            CtlConstantsV2.CMD_ACTION_SCAN_STATUS_COMPLETED,
+            timeoutMs
+        ) == WaitResult.Completed
     }
 
     /**
@@ -423,33 +402,50 @@ object CtlCommandsV2 {
         return message
     }
 
-    fun processReadQRStatus(customFunction: (qrCodeData: String) -> Unit) {
-        val cmd = poll()
-        val result = this.readAllData(cmd)
+    /**
+     * 轮询等待QR码扫描结果；delay 可被取消，取消后轮询立即停止
+     * @param keepWaiting 返回 false 时提前停止轮询（如用户取消）
+     * @return QR码内容；出错或超时返回 CMD_ACTION_READ_QR_RESULT_NULL；keepWaiting 为 false 停止时返回空字符串
+     */
+    suspend fun waitReadQrResult(
+        timeoutMs: Long = READ_QR_TIMEOUT_MS,
+        keepWaiting: () -> Boolean = { true },
+    ): String {
+        val startTime = System.currentTimeMillis()
+        while (System.currentTimeMillis() - startTime <= timeoutMs) {
+            if (!keepWaiting()) {
+                return ""
+            }
 
-        var qrCodeData = ""
-        if (result.isNotEmpty()) {
-            println("processReadQRStatus result: $result")
+            val result = this.readAllData(poll())
 
-            if (isSuccess(result)) {
-                if (result.contains(CtlConstantsV2.CMD_ACTION_READ_QR_STATUS_COMPLETED)) {
-                    val successKey = "COMPLETED-QR"
-                    if (result.contains(successKey)) {
-                        val results = result.split(successKey)
-                        val qrCodeDataTmp = results[1].split(":")[1]
-                        qrCodeData = qrCodeDataTmp.split(",")[0]
-                    }
-                } else if (result.contains(CtlConstantsV2.CMD_ACTION_READ_QR_STATUS_ERROR)) {
-                    val successKey = "ERROR-QR"
-                    if (result.contains(successKey)) {
-                        qrCodeData = CtlConstantsV2.CMD_ACTION_READ_QR_RESULT_NULL
+            if (result.isNotEmpty()) {
+                println("waitReadQrResult result: $result")
+
+                if (isSuccess(result)) {
+                    if (result.contains(CtlConstantsV2.CMD_ACTION_READ_QR_STATUS_COMPLETED)) {
+                        val successKey = "COMPLETED-QR"
+                        if (result.contains(successKey)) {
+                            val qrCodeData = runCatching {
+                                result.split(successKey)[1].split(":")[1].split(",")[0]
+                            }.getOrDefault("")
+                            if (qrCodeData.isNotEmpty()) {
+                                return qrCodeData
+                            }
+                        }
+                    } else if (result.contains(CtlConstantsV2.CMD_ACTION_READ_QR_STATUS_ERROR)) {
+                        if (result.contains("ERROR-QR")) {
+                            return CtlConstantsV2.CMD_ACTION_READ_QR_RESULT_NULL
+                        }
                     }
                 }
             }
+
+            delay(delayMs)
         }
 
-        Thread.sleep(delayMs)
-        customFunction(qrCodeData)
+        Timber.e("waitReadQrResult timeout ${timeoutMs}ms")
+        return CtlConstantsV2.CMD_ACTION_READ_QR_RESULT_NULL
     }
 
     fun readAllData(cmd: CtlSerialMessageV2): String {

@@ -167,8 +167,6 @@ class WorkMainViewModel : ViewModel() {
     private var jobQuery: Job? = null
 
     fun onLoad() {
-        CtlCommandsV2.isWaitScanStatusSuccessCancel = false
-        CtlCommandsV2.isWaitAbsorbStatusSuccessCancel = false
         onReset()
 
         viewModelScope.launch {
@@ -250,9 +248,6 @@ class WorkMainViewModel : ViewModel() {
 
     // 清除交互弹窗
     fun onClearInteraction() {
-        CtlCommandsV2.isWaitScanStatusSuccessCancel = false
-        CtlCommandsV2.isWaitAbsorbStatusSuccessCancel = false
-
         viewModelScope.launch {
             continueSacn.value = false
             actionState.value = ActionState.Default
@@ -270,10 +265,8 @@ class WorkMainViewModel : ViewModel() {
     }
 
     // 控制板断电强制退出 — 中断轮询，重置状态，调用方负责导航
-    // cancel 标志在下次 onLoad() 时恢复为 false
     fun onCtlBoardReset() {
-        CtlCommandsV2.isWaitScanStatusSuccessCancel = true
-        CtlCommandsV2.isWaitAbsorbStatusSuccessCancel = true
+        viewModelScope.launch { cancelJobs() }
         continueSacn.value = false
         actionState.value = ActionState.Default
         viewState.value = ViewState.Default
@@ -1686,13 +1679,20 @@ class WorkMainViewModel : ViewModel() {
     }
 
     private fun readQrSuccess() {
-        if (sysConfig.value.scan == "y" ||
-                        sysConfig.value.scan.isEmpty() ||
-                        AppParams.curUser.role != User.ROLE_DEV
-        ) {
-            CtlCommandsV2.processReadQRStatus { scanQrSuccessCustomFunction(it) }
-        } else {
-            scanQrSuccessCustomFunction(bean.value.qrCode)
+        viewModelScope.launch {
+            if (sysConfig.value.scan == "y" ||
+                            sysConfig.value.scan.isEmpty() ||
+                            AppParams.curUser.role != User.ROLE_DEV
+            ) {
+                // 轮询等待扫码结果；用户取消（continueSacn=false）或超时后停止
+                val qrCodeData =
+                        withContext(Dispatchers.IO) {
+                            CtlCommandsV2.waitReadQrResult { continueSacn.value }
+                        }
+                scanQrSuccessCustomFunction(qrCodeData)
+            } else {
+                scanQrSuccessCustomFunction(bean.value.qrCode)
+            }
         }
     }
 
@@ -2393,8 +2393,6 @@ class WorkMainViewModel : ViewModel() {
     // 退出检测
     fun onActionWorkOut() {
         workFlow = WorkFlowV2.EMPTY
-        CtlCommandsV2.isWaitAbsorbStatusSuccessCancel = true
-        CtlCommandsV2.isWaitScanStatusSuccessCancel = true
 
         actionState.value =
                 ActionState(EVT_LOADING, App.getContext().getString(R.string.work_report_exit))
@@ -2437,9 +2435,6 @@ class WorkMainViewModel : ViewModel() {
     }
 
     fun onActionWorkOutDone(callback: () -> Unit) {
-        CtlCommandsV2.isWaitScanStatusSuccessCancel = true
-        CtlCommandsV2.isWaitAbsorbStatusSuccessCancel = true
-
         actionState.value =
                 ActionState(EVT_LOADING, App.getContext().getString(R.string.work_ing_reset))
 
@@ -2685,88 +2680,35 @@ class WorkMainViewModel : ViewModel() {
         }
     }
 
-    private fun onLoadHomingSuccess() {
-        CtlCommandsV2.processHomingStatus { onLoadHomingSuccessCustomFunction(it) }
+    private suspend fun onActionCaseInputNextHomingSuccess() {
+        CtlCommandsV2.waitHomingStatusSuccess()
+        Timber.d("doMoveOut for chip done")
+        updateAction(ACTION_CASE_CHIP)
+        onClearInteraction()
     }
 
-    private fun onLoadHomingSuccessCustomFunction(progressVal: Int) {
-        viewModelScope.launch {
-            if (progressVal < CtlConstantsV2.CMD_ACTION_HOMING_STATUS_COMPLETED) {
-                withContext(Dispatchers.IO) { onLoadHomingSuccess() }
-            } else {
-                Timber.d("onLoadHomingSuccessCustomFunction done")
-                viewState.value = ViewState.LoadSuccess()
-            }
-        }
-    }
+    private suspend fun onActionWorkOutDoneHomingSuccess(callback: () -> Unit) {
+        CtlCommandsV2.waitHomingStatusSuccess()
 
-    private fun onActionStartNextHomingSuccess() {
-        CtlCommandsV2.processHomingStatus { onActionStartNextHomingSuccessCustomFunction(it) }
-    }
+        val moveToSsResult =
+                CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
+        Timber.w("moveToSsResult: $moveToSsResult")
 
-    private fun onActionStartNextHomingSuccessCustomFunction(progressVal: Int) {
-        viewModelScope.launch {
-            if (progressVal < CtlConstantsV2.CMD_ACTION_HOMING_STATUS_COMPLETED) {
-                withContext(Dispatchers.IO) { onActionStartNextHomingSuccess() }
-            } else {
-                Timber.d("onActionStartNextHomingSuccessCustomFunction done")
-                updateAction(ACTION_CASE_CHIP)
-                onClearInteraction()
-            }
-        }
-    }
+        // 等待成功
+        CtlCommandsV2.waitMoveToSsStatusSuccess()
 
-    private fun onActionCaseInputNextHomingSuccess() {
-        CtlCommandsV2.processHomingStatus { onActionCaseInputNextHomingSuccessCustomFunction(it) }
-    }
+        val moveDurationResult =
+                CtlCommandsV2.readAllData(CtlCommandsV2.closeDoor())
+        Timber.w("moveDurationResult: $moveDurationResult")
 
-    private fun onActionCaseInputNextHomingSuccessCustomFunction(progressVal: Int) {
-        viewModelScope.launch {
-            if (progressVal < CtlConstantsV2.CMD_ACTION_HOMING_STATUS_COMPLETED) {
-                withContext(Dispatchers.IO) { onActionCaseInputNextHomingSuccess() }
-            } else {
-                Timber.d("doMoveOut for chip done")
-                updateAction(ACTION_CASE_CHIP)
-                onClearInteraction()
-            }
-        }
-    }
+        // 等待成功
+        CtlCommandsV2.waitMoveDurationStatusSuccess()
 
-    private fun onActionWorkOutDoneHomingSuccess(callback: () -> Unit) {
-        CtlCommandsV2.processHomingStatus {
-            onActionWorkOutDoneHomingSuccessCustomFunction(it, callback)
-        }
-    }
+        App.getSerialHelper().reconnect()
 
-    private fun onActionWorkOutDoneHomingSuccessCustomFunction(
-            progressVal: Int,
-            callback: () -> Unit
-    ) {
-        viewModelScope.launch {
-            if (progressVal < CtlConstantsV2.CMD_ACTION_HOMING_STATUS_COMPLETED) {
-                withContext(Dispatchers.IO) { onActionWorkOutDoneHomingSuccess(callback) }
-            } else {
-                withContext(Dispatchers.IO) {
-                    val moveToSsResult =
-                            CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
-                    Timber.w("moveToSsResult: $moveToSsResult")
-
-                    // 等待成功
-                    CtlCommandsV2.waitMoveToSsStatusSuccess()
-
-                    val moveDurationResult =
-                            CtlCommandsV2.readAllData(CtlCommandsV2.closeDoor())
-                    Timber.w("moveDurationResult: $moveDurationResult")
-
-                    // 等待成功
-                    CtlCommandsV2.waitMoveDurationStatusSuccess()
-
-                    App.getSerialHelper().reconnect()
-                }
-
-                onClearInteraction()
-                callback()
-            }
+        withContext(Dispatchers.Main) {
+            onClearInteraction()
+            callback()
         }
     }
 

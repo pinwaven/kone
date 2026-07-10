@@ -65,7 +65,6 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -1046,7 +1045,7 @@ class SampleSerialViewModel : ViewModel() {
     }
 
     fun absorb() {
-        viewModelScope.launch {
+        commandJob = viewModelScope.launch {
             text.value = ("吸水中。。。")
             val moveErrorCode = withContext(Dispatchers.IO) {
                 val result = CtlCommandsV2.readAllData(CtlCommandsV2.absorb(240 * 1000))
@@ -1070,7 +1069,7 @@ class SampleSerialViewModel : ViewModel() {
     }
 
     fun scanCard() {
-        viewModelScope.launch {
+        commandJob = viewModelScope.launch {
             text.value = ("扫描中。。。")
             withContext(Dispatchers.IO) {
                 val getLDPwr =
@@ -1205,12 +1204,8 @@ class SampleSerialViewModel : ViewModel() {
 
             withContext(Dispatchers.IO) {
                 CtlCommandsV2.readAllData(CtlCommandsV2.homing())
-                // 轮询等待复位完成；每轮检查取消状态，"取消指令"后立即停止轮询
-                var progressVal = 0
-                while (progressVal < CtlConstantsV2.CMD_ACTION_HOMING_STATUS_COMPLETED) {
-                    ensureActive()
-                    CtlCommandsV2.processHomingStatus { progressVal = it }
-                }
+                // 轮询等待复位完成；delay 可被取消，"取消指令"后立即停止轮询
+                CtlCommandsV2.waitHomingStatusSuccess()
 
                 val moveToSsResult =
                     CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
@@ -1235,19 +1230,10 @@ class SampleSerialViewModel : ViewModel() {
     }
 
     suspend fun readQrSuccess() {
-        CtlCommandsV2.processReadQRStatus { scanQrSuccessCustomFunction(it) }
-    }
-
-    fun scanQrSuccessCustomFunction(qrCodeData: String) {
-        viewModelScope.launch {
-            if (qrCodeData.isEmpty()) {
-                withContext(Dispatchers.IO) {
-                    readQrSuccess()
-                }
-            } else {
-                text.value = ("扫描二维码 success: $qrCodeData")
-            }
+        val qrCodeData = withContext(Dispatchers.IO) {
+            CtlCommandsV2.waitReadQrResult()
         }
+        text.value = ("扫描二维码 success: $qrCodeData")
     }
 
     // TODO aabbcc
@@ -1558,11 +1544,7 @@ class SampleSerialViewModel : ViewModel() {
             CtlCommandsV2.readAllData(CtlCommandsV2.readQR())
         }
         val qrValue = withContext(Dispatchers.IO) {
-            pollQrCodeResult {
-                var result = ""
-                CtlCommandsV2.processReadQRStatus { result = it }
-                result
-            }
+            CtlCommandsV2.waitReadQrResult()
         }
         oneKeyQrCode.value = qrValue
     }
@@ -1944,14 +1926,6 @@ internal fun defaultOneKeyTestSteps(): List<OneKeyTestStep> =
         OneKeyTestStep("扫描芯片"),
         OneKeyTestStep("显示扫描结果图"),
     )
-
-internal fun pollQrCodeResult(poll: () -> String): String {
-    var qrValue = ""
-    while (qrValue.isEmpty()) {
-        qrValue = poll()
-    }
-    return qrValue
-}
 
 private fun String.toLaserPowerInput(): String {
     val filtered = buildString {
