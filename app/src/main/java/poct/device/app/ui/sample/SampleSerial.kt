@@ -642,7 +642,7 @@ private fun OneKeyChartDialog(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (qrCode.isNotBlank()) {
+                        if (qrCode.isNotBlank() && qrCode != CtlConstantsV2.CMD_ACTION_READ_QR_RESULT_NULL) {
                             if (uploadState is OneKeyUploadState.Success) {
                                 Text(
                                     fontSize = 11.sp,
