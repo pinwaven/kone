@@ -11,10 +11,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import poct.device.app.bean.ConfigInfoBean
+import poct.device.app.bean.ConfigInfoV2Bean
 import poct.device.app.bean.ConfigSysBean
 import poct.device.app.entity.service.SysConfigService
 import poct.device.app.serial.v2.SerialHelperV2
 import poct.device.app.serial.v2.ctl.CtlCommandsV2
+import poct.device.app.thirdparty.NanoApi
+import poct.device.app.thirdparty.model.nano.NanoAuthSupport
 import poct.device.app.utils.app.AppLangUtils
 import poct.device.app.utils.app.AppSystemUtils
 import poct.device.app.utils.app.DeviceIdUtils
@@ -125,6 +128,9 @@ class App : Application() {
                 // power 板上电后第一次请求可能会CRC报错，先poll一次
                 CtlCommandsV2.readAllData(CtlCommandsV2.poll())
 
+                // 启动时静默上报软件版本与固件版本
+                reportVersionsSilently()
+
                 // 物联网连接
                 val configInfo =
                     SysConfigService.findBean(ConfigInfoBean.PREFIX, ConfigInfoBean::class)
@@ -136,6 +142,57 @@ class App : Application() {
                 //            CommService.instance().startIot("192.168.1.16", 7300, 9100, "TM-YG01-00046", prefix)
             }
         }.start()
+    }
+
+    /**
+     * 启动时静默上报软件版本与固件版本。
+     *
+     * 尽力而为：无 UI 提示，失败仅记录日志。仅在 Nano 流程下执行
+     * （此时才配置了上报接口）。
+     *
+     * 串口读取固件版本为本地快速操作，同步完成以保证串口指令有序；
+     * 网络上报可能受网速影响，放到独立协程后台执行，避免拖慢启动流程。
+     */
+    private suspend fun reportVersionsSilently() {
+        try {
+            val sysConfig = SysConfigService.findBean(ConfigSysBean.PREFIX, ConfigSysBean::class)
+            if (!ConfigSysBean.isNanoFlow(sysConfig.flow)) {
+                Timber.d("skip silent version report: not nano flow")
+                return
+            }
+
+            val hiResult = CtlCommandsV2.readAllData(CtlCommandsV2.hi())
+            val firmwareVersion = NanoAuthSupport.extractFirmwareVersion(hiResult)
+
+            // 刷新本地缓存的固件版本
+            if (firmwareVersion.isNotBlank()) {
+                val configBean =
+                    SysConfigService.findBean(ConfigInfoBean.PREFIX, ConfigInfoV2Bean::class)
+                SysConfigService.saveBean(
+                    ConfigInfoBean.PREFIX,
+                    configBean.copy(hardware = firmwareVersion)
+                )
+            }
+
+            // 网络上报后台执行，不阻塞启动
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val result = NanoApi.uploadLocalMachineInfo(firmwareVersion = firmwareVersion)
+                    Timber.d(
+                        "silent version report: software=%s firmware=%s ok=%s skipped=%s msg=%s",
+                        BuildConfig.VERSION_NAME,
+                        firmwareVersion,
+                        result.ok,
+                        result.skipped,
+                        result.message
+                    )
+                } catch (e: Exception) {
+                    Timber.w(e, "silent version report upload failed")
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "silent version report failed")
+        }
     }
 
     override fun onTerminate() {
