@@ -1722,20 +1722,36 @@ class WorkMainViewModel : ViewModel() {
     }
 
     private suspend fun startTestModeLocalCard() {
+        // 测试模式也需扫码；扫码结果为空时使用 testModeCardCode 兜底
+        continueSacn.value = true
+        val scannedQr =
+                withContext(Dispatchers.IO) {
+                    CtlCommandsV2.readAllData(CtlCommandsV2.readQR())
+                    CtlCommandsV2.waitReadQrResult { continueSacn.value }
+                }
         continueSacn.value = false
+        val cardCode =
+                scannedQr
+                        .takeIf {
+                            it.isNotEmpty() &&
+                                    it != CtlConstantsV2.CMD_ACTION_READ_QR_RESULT_NULL
+                        }
+                        ?: testModeCardCode
+        Timber.d("test mode qrCode: scanned=$scannedQr resolved=$cardCode")
+
         val testModeConfig = withContext(Dispatchers.IO) { TestModeConfigService.findBean() }
         activeTestModeConfig = testModeConfig
-        val cardInfo = TestModeConfigService.buildLocalCardInfo(testModeCardCode, testModeConfig)
+        val cardInfo = TestModeConfigService.buildLocalCardInfo(cardCode, testModeConfig)
         val cardBatchCode = cardInfo.cardBatch.code
 
         onBeanUpdate(
                 bean.value.copy(
                         reagentId = cardBatchCode,
                         type = cardInfo.cardBatch.type,
-                        qrCode = testModeCardCode,
+                        qrCode = cardCode,
                         caseId =
                                 cardInfo.card.id.ifEmpty {
-                                    AppTypeUtils.findCardId(testModeCardCode)
+                                    AppTypeUtils.findCardId(cardCode)
                                 },
                         cardInfo = cardInfo,
                 )
@@ -2234,15 +2250,16 @@ class WorkMainViewModel : ViewModel() {
             pointList: ArrayList<CasePoint>,
             workResult: String = bean.value.workResult,
     ): CaseBean {
+        val cardCode = bean.value.qrCode.ifEmpty { testModeCardCode }
         return bean.value.copy(
                 patientId = bean.value.patientId.ifEmpty { "test-mode" },
                 name = bean.value.name.ifEmpty { "Test User" },
                 birthday = bean.value.birthday.ifEmpty { "1970-01-01" },
-                caseId = bean.value.caseId.ifEmpty { testModeCardCode },
-                qrCode = testModeCardCode,
+                caseId = bean.value.caseId.ifEmpty { cardCode },
+                qrCode = cardCode,
                 reagentId =
                         bean.value.reagentId.ifEmpty {
-                            AppTypeUtils.findCardBatchCode(testModeCardCode)
+                            AppTypeUtils.findCardBatchCode(cardCode)
                         },
                 type = CaseBean.TYPE_CRP,
                 workResult = workResult,
