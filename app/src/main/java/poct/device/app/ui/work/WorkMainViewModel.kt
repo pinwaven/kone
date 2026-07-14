@@ -1674,13 +1674,11 @@ class WorkMainViewModel : ViewModel() {
                             sysConfig.value.scan.isEmpty() ||
                             AppParams.curUser.role != User.ROLE_DEV
             ) {
-                if (isSensorDetectionEnabled()) {
-                    // 判断卡片是否插到位
-                    val hasCard = detectChipInPlaceWithRetry()
-                    if (!hasCard) {
-                        askChipInsertedConfirm { loadCardAfterChipCheck() }
-                        return@launch
-                    }
+                // 判断卡片是否插到位
+                val hasCard = detectChipInPlaceWithRetry()
+                if (!hasCard) {
+                    askChipInsertedConfirm { loadCardAfterChipCheck() }
+                    return@launch
                 }
                 loadCardAfterChipCheck()
             } else {
@@ -2220,10 +2218,6 @@ class WorkMainViewModel : ViewModel() {
         return AppParams.runtimeModeState.testModeEnabled.value
     }
 
-    private fun isSensorDetectionEnabled(): Boolean {
-        return AppParams.runtimeModeState.sensorDetectionEnabled.value
-    }
-
     private suspend fun applyTestModeConfigOverride(config: CardConfig): CardConfig {
         if (!isTestModeEnabled()) {
             return config
@@ -2397,10 +2391,9 @@ class WorkMainViewModel : ViewModel() {
 
     fun onActionContinueConfirm() {
         viewModelScope.launch {
-            if (isSensorDetectionEnabled() &&
-                            (sysConfig.value.scan == "y" ||
-                                    sysConfig.value.scan.isEmpty() ||
-                                    AppParams.curUser.role != User.ROLE_DEV)
+            if (sysConfig.value.scan == "y" ||
+                            sysConfig.value.scan.isEmpty() ||
+                            AppParams.curUser.role != User.ROLE_DEV
             ) {
                 // 判断卡片是否插到位
                 val hasCard = detectChipInPlaceWithRetry()

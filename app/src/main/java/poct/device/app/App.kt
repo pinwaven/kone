@@ -110,13 +110,6 @@ class App : Application() {
     private fun startupService() {
         Thread {
             CoroutineScope(Dispatchers.IO).launch {
-                // 恢复传感器检测开关
-                val configSys =
-                    SysConfigService.findBean(ConfigSysBean.PREFIX, ConfigSysBean::class)
-                AppParams.runtimeModeState.setSensorDetectionEnabled(
-                    ConfigSysBean.isSensorDetectionEnabled(configSys.sensorDetection)
-                )
-
                 // TODO 简化信息
                 // 串口服务
 //                ctlService = CtlSerialServiceV2()
