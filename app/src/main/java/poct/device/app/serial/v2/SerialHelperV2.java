@@ -78,8 +78,46 @@ public class SerialHelperV2 {
         this.send(bOutArray);
     }
 
+    /**
+     * 丢弃接收缓冲区中所有残留字节。
+     *
+     * <p>在发送新指令前调用，避免上一条指令的迟到应答（或 MCU 主动上报的帧）
+     * 被当作本次指令的应答读取，从而造成"读到上一条指令结果"的错帧。</p>
+     *
+     * @return 丢弃的字节数
+     */
+    public int drainInput() {
+        InputStream in = this.mInputStream;
+        if (in == null) {
+            return 0;
+        }
+
+        int drained = 0;
+        try {
+            int available = in.available();
+            while (available > 0) {
+                long skipped = in.skip(available);
+                if (skipped <= 0) {
+                    break;
+                }
+                drained += (int) skipped;
+                available = in.available();
+            }
+        } catch (IOException e) {
+            Timber.tag("serial").w(e, "drainInput failed");
+        }
+
+        if (drained > 0) {
+            Timber.tag("serial").w("drainInput discarded %d stale bytes", drained);
+        }
+        return drained;
+    }
+
     public byte[] readAllData() {
-        int timeout = 1000;
+        return this.readAllData(1000);
+    }
+
+    public byte[] readAllData(int timeout) {
         int interByteTimeout = 10;
 
         long startTime = System.currentTimeMillis();

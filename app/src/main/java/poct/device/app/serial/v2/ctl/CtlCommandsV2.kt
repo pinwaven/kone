@@ -34,6 +34,9 @@ object CtlCommandsV2 {
     const val HOMING_TIMEOUT_MS = 60_000L
     const val READ_QR_TIMEOUT_MS = 30_000L
 
+    // 单次读取串口应答的默认超时（毫秒）。慢指令可传入更大的值。
+    const val READ_TIMEOUT_MS = 1000
+
     /**
      * 系统状态轮询
      */
@@ -448,13 +451,15 @@ object CtlCommandsV2 {
         return CtlConstantsV2.CMD_ACTION_READ_QR_RESULT_NULL
     }
 
-    fun readAllData(cmd: CtlSerialMessageV2): String {
+    fun readAllData(cmd: CtlSerialMessageV2, timeoutMs: Int = READ_TIMEOUT_MS): String {
         val hexMsg = cmd.toHexString()
         Timber.w("readAllData msg: %s", hexMsg)
 
+        // 发送前清空接收缓冲区，避免读到上一条指令的迟到应答
+        App.getSerialHelper().drainInput()
         App.getSerialHelper().sendHex(hexMsg)
 
-        val buffer = App.getSerialHelper().readAllData()
+        val buffer = App.getSerialHelper().readAllData(timeoutMs)
         if (buffer != null) {
             val receiverBuf: ByteBuf = Unpooled.buffer(buffer.size)
             try {
@@ -471,7 +476,7 @@ object CtlCommandsV2 {
         return ""
     }
 
-    fun readAllDataByteArray(cmd: CtlSerialMessageV2): ByteArray? {
+    fun readAllDataByteArray(cmd: CtlSerialMessageV2, timeoutMs: Int = READ_TIMEOUT_MS): ByteArray? {
         val hexMsg = cmd.toHexString()
         val maxRetries = 3
         var lastError: Throwable? = null
@@ -479,8 +484,10 @@ object CtlCommandsV2 {
         for (attempt in 1..maxRetries) {
             Timber.w("readAllDataByteArray attempt=%d/%d msg=%s", attempt, maxRetries, hexMsg)
             try {
+                // 每次发送前清空接收缓冲区，避免读到上一条指令的迟到应答
+                App.getSerialHelper().drainInput()
                 App.getSerialHelper().sendHex(hexMsg)
-                val buffer = App.getSerialHelper().readAllData()
+                val buffer = App.getSerialHelper().readAllData(timeoutMs)
                 if (buffer != null) {
                     val receiverBuf: ByteBuf = Unpooled.buffer(buffer.size)
                     try {
