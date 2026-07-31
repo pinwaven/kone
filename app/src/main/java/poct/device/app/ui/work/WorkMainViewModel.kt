@@ -180,16 +180,13 @@ class WorkMainViewModel : ViewModel() {
         viewModelScope.launch {
             viewState.value = ViewState.LoadingOver()
 
-            withContext(Dispatchers.IO) {
-                val moveOutResult =
-                    CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
-                Timber.w("moveOutResult: $moveOutResult")
-
-                // 等待成功
-                CtlCommandsV2.waitMoveDurationStatusSuccess()
-            }
+            // 进入检测页先移出片仓（失败时归零重试，见 CtlCommandsV2.moveOutWithRetry）
+            val ejectOk = withContext(Dispatchers.IO) { CtlCommandsV2.moveOutWithRetry() }
 
             viewState.value = ViewState.LoadSuccess()
+            if (!ejectOk) {
+                ejectAndPromptRetry("moveOut")
+            }
         }
 
         //        // TODO 简化信息
@@ -268,6 +265,23 @@ class WorkMainViewModel : ViewModel() {
         }
     }
 
+    /**
+     * 机械动作经 [CtlCommandsV2] 的 *WithRetry（含归零重试）仍失败后调用：
+     * 退出试剂卡，让用户能取回卡片，并弹出提示重试的对话框（复用 EVT_DEV_ERROR，
+     * 其“确定”会重启流程）。此处不调用 onClearInteraction，避免把刚设置的弹窗清掉。
+     */
+    private suspend fun ejectAndPromptRetry(name: String) {
+        Timber.e("$name failed after retries; ejecting card and prompting retry")
+        withContext(Dispatchers.IO) { runCatching { CtlCommandsV2.ejectCard() } }
+        withContext(Dispatchers.Main) {
+            actionState.value =
+                    ActionState(
+                            EVT_DEV_ERROR,
+                            App.getContext().getString(R.string.work_mechanical_retry_failed)
+                    )
+        }
+    }
+
     // 退出确认
     fun onExitConfirm() {
         actionState.value = ActionState(event = EVT_EXIT)
@@ -298,16 +312,12 @@ class WorkMainViewModel : ViewModel() {
             updateAction(ACTION_CASE_SAMPLE)
             onClearInteraction()
 
-            withContext(Dispatchers.IO) {
-                val moveToSsResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
-                Timber.w("moveToSsResult: $moveToSsResult")
-
-                // 等待成功
-                CtlCommandsV2.waitMoveToSsStatusSuccess()
-            }
+            val moveOutOk = withContext(Dispatchers.IO) { CtlCommandsV2.moveOutWithRetry() }
 
             viewState.value = ViewState.LoadSuccess()
+            if (!moveOutOk) {
+                ejectAndPromptRetry("moveOut")
+            }
         }
     }
 
@@ -328,24 +338,16 @@ class WorkMainViewModel : ViewModel() {
                 Timber.w("cancelResult: $cancelResult")
 
                 withContext(Dispatchers.IO) {
-                    val moveToSsResult =
-                            CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
-                    Timber.w("moveToSsResult: $moveToSsResult")
-
-                    // 等待成功
-                    CtlCommandsV2.waitMoveToSsStatusSuccess()
+                    // 返回上一步：移出片仓（失败时归零重试）。此处为回退复位路径，
+                    // 尽力而为，无论结果都继续复位与导航。
+                    CtlCommandsV2.moveOutWithRetry()
 
                     if (cardConfig == null ||
                                     (cardConfig != null &&
                                             cardConfig!!.ft0 >= 1 &&
                                             action.value == ACTION_WORK)
                     ) {
-                        val moveDurationResult =
-                                CtlCommandsV2.readAllData(CtlCommandsV2.closeDoor())
-                        Timber.w("moveDurationResult: $moveDurationResult")
-
-                        // 等待成功
-                        CtlCommandsV2.waitMoveDurationStatusSuccess()
+                        CtlCommandsV2.closeDoorWithRetry()
                     }
 
                     App.getSerialHelper().reconnect()
@@ -372,10 +374,14 @@ class WorkMainViewModel : ViewModel() {
             curCardConfig.value = cardConfig!!
             Timber.w("=====cardConfig $cardConfig")
 
-            withContext(Dispatchers.IO) {
-                // 移出片仓
-                CtlCommandsV2.readAllData(CtlCommandsV2.homing())
-                onActionCaseInputNextHomingSuccess()
+            // 移出片仓（归零失败时重试，见 CtlCommandsV2.homingWithRetry）
+            val homingOk = withContext(Dispatchers.IO) { CtlCommandsV2.homingWithRetry() }
+            if (homingOk) {
+                Timber.d("doMoveOut for chip done")
+                updateAction(ACTION_CASE_CHIP)
+                onClearInteraction()
+            } else {
+                ejectAndPromptRetry("homing")
             }
         }
     }
@@ -436,15 +442,11 @@ class WorkMainViewModel : ViewModel() {
                     showTime.value = true
                     viewModelScope.launch {
                         if (it.action == ACTION_WORK_WAIT) {
-                            withContext(Dispatchers.IO) {
-                                val moveToSsResult =
-                                        CtlCommandsV2.readAllData(
-                                                CtlCommandsV2.moveIn()
-                                        )
-                                Timber.d("moveToSsResult: $moveToSsResult")
-
-                                // 等待成功
-                                CtlCommandsV2.waitMoveToSsStatusSuccess()
+                            val moveInOk =
+                                    withContext(Dispatchers.IO) { CtlCommandsV2.moveInWithRetry() }
+                            if (!moveInOk) {
+                                ejectAndPromptRetry("moveIn")
+                                return@launch
                             }
 
                             // 初始反应中
@@ -484,15 +486,11 @@ class WorkMainViewModel : ViewModel() {
                             checkStep.value = 5
                             progress.value = 5F
 
-                            withContext(Dispatchers.IO) {
-                                val moveToSsResult =
-                                        CtlCommandsV2.readAllData(
-                                                CtlCommandsV2.moveIn()
-                                        )
-                                Timber.d("moveToSsResult: $moveToSsResult")
-
-                                // 等待成功
-                                CtlCommandsV2.waitMoveToSsStatusSuccess()
+                            val moveInOk =
+                                    withContext(Dispatchers.IO) { CtlCommandsV2.moveInWithRetry() }
+                            if (!moveInOk) {
+                                ejectAndPromptRetry("moveIn")
+                                return@launch
                             }
 
                             doNext()
@@ -501,17 +499,13 @@ class WorkMainViewModel : ViewModel() {
                         ) {
                             // xt1>0：先移入芯片再开始倒计时；倒计时结束后自动进入下一步
                             isChipMovingIn.value = true
-                            withContext(Dispatchers.IO) {
-                                val moveToSsResult =
-                                        CtlCommandsV2.readAllData(
-                                                CtlCommandsV2.moveIn()
-                                        )
-                                Timber.d("moveToSsResult: $moveToSsResult")
-
-                                // 等待成功
-                                CtlCommandsV2.waitMoveToSsStatusSuccess()
-                            }
+                            val moveInOk =
+                                    withContext(Dispatchers.IO) { CtlCommandsV2.moveInWithRetry() }
                             isChipMovingIn.value = false
+                            if (!moveInOk) {
+                                ejectAndPromptRetry("moveIn")
+                                return@launch
+                            }
                         }
                     }
                 }
@@ -904,11 +898,8 @@ class WorkMainViewModel : ViewModel() {
                                     progress.value = endProgress
                                 }
 
-                                // 整片检测
-                                val scanResult = CtlCommandsV2.readAllData(workFlowAction.cmd)
-                                Timber.w("scanResult: $scanResult")
-
-                                val scanSuccess = CtlCommandsV2.waitScanStatusSuccess()
+                                // 整片检测（失败时归零重试，见 CtlCommandsV2.scanWithRetry）
+                                val scanSuccess = CtlCommandsV2.scanWithRetry(workFlowAction.cmd)
 
                                 // 等待进度更新完成（如果扫描先完成）
                                 progressJob.await()
@@ -917,6 +908,7 @@ class WorkMainViewModel : ViewModel() {
                             }
 
                     if (!scanOk) {
+                        ejectAndPromptRetry("scan")
                         return@launch
                     }
 
@@ -998,15 +990,11 @@ class WorkMainViewModel : ViewModel() {
                     checkStep.value = 5
                     progress.value = 5F
 
-                    withContext(Dispatchers.IO) {
-                        val moveToSsResult =
-                                CtlCommandsV2.readAllData(
-                                        CtlCommandsV2.moveIn()
-                                )
-                        Timber.d("moveToSsResult: $moveToSsResult")
-
-                        // 等待成功
-                        CtlCommandsV2.waitMoveToSsStatusSuccess()
+                    val openMoveInOk =
+                            withContext(Dispatchers.IO) { CtlCommandsV2.moveInWithRetry() }
+                    if (!openMoveInOk) {
+                        ejectAndPromptRetry("moveIn")
+                        return@launch
                     }
 
                     // 反应中
@@ -1040,57 +1028,55 @@ class WorkMainViewModel : ViewModel() {
                         checkStep.value = 20
                         progress.value = 20F
 
-                        withContext(Dispatchers.IO) {
-                            // 并发执行进度更新和吸水任务
-                            val progressJob = async {
-                                // 进度从20到49的累计逻辑
-                                val totalMillis = cardConfig!!.xt1 * 1000L
-                                val startProgress = 20F
-                                val endProgress = 49F
-                                val progressRange = endProgress - startProgress
+                        val absorbOk =
+                                withContext(Dispatchers.IO) {
+                                    // 并发执行进度更新和吸水任务
+                                    val progressJob = async {
+                                        // 进度从20到49的累计逻辑
+                                        val totalMillis = cardConfig!!.xt1 * 1000L
+                                        val startProgress = 20F
+                                        val endProgress = 49F
+                                        val progressRange = endProgress - startProgress
 
-                                val updateInterval = 100L // 每100ms更新一次
-                                val steps = totalMillis / updateInterval
+                                        val updateInterval = 100L // 每100ms更新一次
+                                        val steps = totalMillis / updateInterval
 
-                                if (steps > 0) {
-                                    val increment = progressRange / steps
-                                    for (i in 1..steps) {
-                                        delay(updateInterval)
-                                        val currentProgress = startProgress + (increment * i)
-                                        progress.value = currentProgress.coerceAtMost(endProgress)
+                                        if (steps > 0) {
+                                            val increment = progressRange / steps
+                                            for (i in 1..steps) {
+                                                delay(updateInterval)
+                                                val currentProgress = startProgress + (increment * i)
+                                                progress.value =
+                                                        currentProgress.coerceAtMost(endProgress)
+                                            }
+                                        }
+                                        // 确保最终进度精确到49
+                                        progress.value = endProgress
                                     }
+
+                                    // 吸液失败时归零重试，见 CtlCommandsV2.absorbWithRetry
+                                    val ok =
+                                            CtlCommandsV2.absorbWithRetry(
+                                                    workFlowAction.cmd,
+                                                    cardConfig!!.xt1 * 1000L
+                                            )
+
+                                    // 等待进度更新完成
+                                    progressJob.await()
+                                    ok
                                 }
-                                // 确保最终进度精确到49
-                                progress.value = endProgress
-                            }
-
-                            val absorbResult = CtlCommandsV2.readAllData(workFlowAction.cmd)
-                            Timber.w("absorbResult: $absorbResult")
-
-                            delay(cardConfig!!.xt1 * 1000L)
-                            CtlCommandsV2.waitAbsorbStatusSuccess()
-
-                            // 等待进度更新完成
-                            progressJob.await()
+                        if (!absorbOk) {
+                            ejectAndPromptRetry("absorb")
+                            return@launch
                         }
 
-                        // 吸液完成后移入芯片
-                        val moveErrorCode =
+                        // 吸液完成后移入芯片（多步序列，失败时归零重试）
+                        val moveOk =
                                 withContext(Dispatchers.IO) {
-                                    CtlCommandsV2.moveChipInAfterAbsorb()
+                                    CtlCommandsV2.moveChipInAfterAbsorbWithRetry()
                                 }
-                        if (moveErrorCode.isNotEmpty()) {
-                            Timber.e("moveChipInAfterAbsorb error: $moveErrorCode")
-                            actionState.value =
-                                    ActionState(
-                                            EVT_DEV_ERROR,
-                                            App.getContext()
-                                                    .getString(
-                                                            R.string.work_move_chip_error,
-                                                            moveErrorCode
-                                                    )
-                                    )
-                            onClearInteraction()
+                        if (!moveOk) {
+                            ejectAndPromptRetry("moveChipInAfterAbsorb")
                             return@launch
                         }
                     } else {
@@ -1166,28 +1152,31 @@ class WorkMainViewModel : ViewModel() {
 
             //        checkStep.value = 90
 
-            withContext(Dispatchers.IO) {
-                val moveToSsResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
-                Timber.w("moveToSsResult: $moveToSsResult")
+            val ok =
+                    withContext(Dispatchers.IO) {
+                        // 移出失败时归零重试，见 CtlCommandsV2.moveOutWithRetry
+                        var moveOk = CtlCommandsV2.moveOutWithRetry()
 
-                // 等待成功
-                CtlCommandsV2.waitMoveToSsStatusSuccess()
+                        if (moveOk &&
+                                        (cardConfig == null ||
+                                                (cardConfig != null &&
+                                                        cardConfig!!.ft0 >= 1 &&
+                                                        action.value == ACTION_WORK))
+                        ) {
+                            moveOk =
+                                    CtlCommandsV2.moveDurationWithRetry(
+                                            "moveOutClose",
+                                            CtlCommandsV2.moveDuration(0, 70000, 900)
+                                    )
+                        }
 
-                if (cardConfig == null ||
-                                (cardConfig != null &&
-                                        cardConfig!!.ft0 >= 1 &&
-                                        action.value == ACTION_WORK)
-                ) {
-                    val moveDurationResult =
-                            CtlCommandsV2.readAllData(CtlCommandsV2.moveDuration(0, 70000, 900))
-                    Timber.w("moveDurationResult: $moveDurationResult")
+                        App.getSerialHelper().reconnect()
+                        moveOk
+                    }
 
-                    // 等待成功
-                    CtlCommandsV2.waitMoveDurationStatusSuccess()
-                }
-
-                App.getSerialHelper().reconnect()
+            if (!ok) {
+                ejectAndPromptRetry("moveOut")
+                return@launch
             }
 
             checkStep.value = 100
@@ -1614,26 +1603,29 @@ class WorkMainViewModel : ViewModel() {
     // 单次流程内仅允许一次向内移动重试
     private var isChipRetryUsed = false
 
-    /** 判断卡片是否插到位，未检测到时向内移动 2mm 重试一次（单次流程内仅重试一次） */
-    private suspend fun detectChipInPlaceWithRetry(): Boolean {
-        var hasCard = detectChipInPlace()
+    /** 芯片检测结果：已到位 / 未检测到 / 补偿移动本身硬件出错 */
+    private sealed interface ChipCheck {
+        object Detected : ChipCheck
+        object NotDetected : ChipCheck
+        object MoveError : ChipCheck
+    }
 
-        if (!hasCard && !isChipRetryUsed) {
-            isChipRetryUsed = true
+    /**
+     * 判断卡片是否插到位，未检测到时向内移动 2mm 补偿重试一次（单次流程内仅重试一次）。
+     * 补偿移动经带归零重试封装：多次仍出错返回 [ChipCheck.MoveError]，交由调用方退卡提示，
+     * 绝不能吞掉移动错误后凭 GPIO 读数当成检测成功继续。
+     */
+    private suspend fun detectChipInPlaceWithRetry(): ChipCheck {
+        if (detectChipInPlace()) return ChipCheck.Detected
+        if (isChipRetryUsed) return ChipCheck.NotDetected
+        isChipRetryUsed = true
 
-            withContext(Dispatchers.IO) {
-                val moveDurationResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveIn2mm())
-                Timber.w("moveDurationResult: $moveDurationResult")
-
-                // 等待成功
-                CtlCommandsV2.waitMoveDurationStatusSuccess()
-            }
-
-            hasCard = detectChipInPlace()
+        val nudgeOk = withContext(Dispatchers.IO) {
+            CtlCommandsV2.moveDurationWithRetry("moveIn2mm", CtlCommandsV2.moveIn2mm())
         }
+        if (!nudgeOk) return ChipCheck.MoveError
 
-        return hasCard
+        return if (detectChipInPlace()) ChipCheck.Detected else ChipCheck.NotDetected
     }
 
     // 芯片未检测到时，等待用户确认"已完全插入"后要继续执行的流程
@@ -1675,12 +1667,17 @@ class WorkMainViewModel : ViewModel() {
                             AppParams.curUser.role != User.ROLE_DEV
             ) {
                 // 判断卡片是否插到位
-                val hasCard = detectChipInPlaceWithRetry()
-                if (!hasCard) {
-                    askChipInsertedConfirm { loadCardAfterChipCheck() }
-                    return@launch
+                when (detectChipInPlaceWithRetry()) {
+                    ChipCheck.Detected -> loadCardAfterChipCheck()
+                    ChipCheck.NotDetected -> {
+                        askChipInsertedConfirm { loadCardAfterChipCheck() }
+                        return@launch
+                    }
+                    ChipCheck.MoveError -> {
+                        ejectAndPromptRetry("moveIn2mm")
+                        return@launch
+                    }
                 }
-                loadCardAfterChipCheck()
             } else {
                 continueSacn.value = true
                 readQrSuccess()
@@ -2396,10 +2393,16 @@ class WorkMainViewModel : ViewModel() {
                             AppParams.curUser.role != User.ROLE_DEV
             ) {
                 // 判断卡片是否插到位
-                val hasCard = detectChipInPlaceWithRetry()
-                if (!hasCard) {
-                    askChipInsertedConfirm { doNext() }
-                    return@launch
+                when (detectChipInPlaceWithRetry()) {
+                    ChipCheck.Detected -> Unit
+                    ChipCheck.NotDetected -> {
+                        askChipInsertedConfirm { doNext() }
+                        return@launch
+                    }
+                    ChipCheck.MoveError -> {
+                        ejectAndPromptRetry("moveIn2mm")
+                        return@launch
+                    }
                 }
             }
 
@@ -2480,29 +2483,18 @@ class WorkMainViewModel : ViewModel() {
                 val cancelResult = CtlCommandsV2.readAllData(CtlCommandsV2.cancel())
                 Timber.w("cancelResult: $cancelResult")
 
+                // 退出复位路径：各机械动作失败时归零重试（尽力而为），无论结果都完成退出回调
                 if ((cardConfig != null &&
                                 cardConfig!!.ft0 >= 1 &&
                                 action.value == ACTION_WORK_WAIT) ||
                                 action.value == ACTION_WORK_PROCESS
                 ) {
-                    val homingResult = CtlCommandsV2.readAllData(CtlCommandsV2.homing())
-                    Timber.w("homingResult: $homingResult")
+                    CtlCommandsV2.homingWithRetry()
 
                     onActionWorkOutDoneHomingSuccess(callback)
                 } else {
-                    val moveToSsResult =
-                            CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
-                    Timber.w("moveToSsResult: $moveToSsResult")
-
-                    // 等待成功
-                    CtlCommandsV2.waitMoveToSsStatusSuccess()
-
-                    val moveDurationResult =
-                            CtlCommandsV2.readAllData(CtlCommandsV2.closeDoor())
-                    Timber.w("moveDurationResult: $moveDurationResult")
-
-                    // 等待成功
-                    CtlCommandsV2.waitMoveDurationStatusSuccess()
+                    CtlCommandsV2.moveOutWithRetry()
+                    CtlCommandsV2.closeDoorWithRetry()
 
                     onClearInteraction()
                     callback()
@@ -2715,29 +2707,10 @@ class WorkMainViewModel : ViewModel() {
         }
     }
 
-    private suspend fun onActionCaseInputNextHomingSuccess() {
-        CtlCommandsV2.waitHomingStatusSuccess()
-        Timber.d("doMoveOut for chip done")
-        updateAction(ACTION_CASE_CHIP)
-        onClearInteraction()
-    }
-
     private suspend fun onActionWorkOutDoneHomingSuccess(callback: () -> Unit) {
-        CtlCommandsV2.waitHomingStatusSuccess()
-
-        val moveToSsResult =
-                CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
-        Timber.w("moveToSsResult: $moveToSsResult")
-
-        // 等待成功
-        CtlCommandsV2.waitMoveToSsStatusSuccess()
-
-        val moveDurationResult =
-                CtlCommandsV2.readAllData(CtlCommandsV2.closeDoor())
-        Timber.w("moveDurationResult: $moveDurationResult")
-
-        // 等待成功
-        CtlCommandsV2.waitMoveDurationStatusSuccess()
+        // homingWithRetry 已等待归零完成；此处移出并关门，失败时归零重试（尽力而为）
+        CtlCommandsV2.moveOutWithRetry()
+        CtlCommandsV2.closeDoorWithRetry()
 
         App.getSerialHelper().reconnect()
 

@@ -43,15 +43,13 @@ class TestModePointChartViewModel : ViewModel() {
                 val cancelResult = CtlCommandsV2.readAllData(CtlCommandsV2.cancel())
                 Timber.w("testMode chart home cancelResult: $cancelResult")
 
-                val moveToSsResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
-                Timber.w("testMode chart home moveToSsResult: $moveToSsResult")
-                CtlCommandsV2.waitMoveToSsStatusSuccess()
-
-                val moveDurationResult =
-                        CtlCommandsV2.readAllData(CtlCommandsV2.closeDoor())
-                Timber.w("testMode chart home moveDurationResult: $moveDurationResult")
-                CtlCommandsV2.waitMoveDurationStatusSuccess()
+                // 归位是返回导航的尽力而为动作：带归零重试，失败仅记录日志，仍继续返回
+                if (!CtlCommandsV2.moveOutWithRetry()) {
+                    Timber.e("testMode chart home moveOut failed after retries")
+                }
+                if (!CtlCommandsV2.closeDoorWithRetry()) {
+                    Timber.e("testMode chart home closeDoor failed after retries")
+                }
 
                 App.getSerialHelper().reconnect()
             }

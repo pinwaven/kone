@@ -143,6 +143,7 @@
     <string name="work_case_put_chip_tip">未检测到芯片，请确保“芯片”已推至底</string>
     <string name="work_chip_fully_inserted">确认</string>
     <string name="work_move_chip_error">芯片移动异常：%1$s</string>
+    <string name="work_mechanical_retry_failed">机械动作多次重试仍失败，已退出试剂卡，请重试</string>
     <string name="work_chip_moving_in">正在移入芯片…</string>
     <string name="work_case_cut_off2_wait">采样反应中，倒计时结束后点击“下一步”开始检测</string>
     <string name="work_case_wait">样本反应</string>

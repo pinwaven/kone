@@ -82,6 +82,7 @@ import poct.device.app.component.wakeScreenOnTouch
 import poct.device.app.entity.CasePoint
 import poct.device.app.serial.v2.ctl.CtlCommandsV2
 import poct.device.app.serial.v2.ctl.CtlConstantsV2
+import poct.device.app.serial.v2.ctl.WaitResult
 import poct.device.app.theme.filledFontColor
 import poct.device.app.theme.fontColor
 import poct.device.app.theme.inputFontColor
@@ -832,6 +833,13 @@ internal fun oneKeyChartDialogCloseOrientation(): Int = ActivityInfo.SCREEN_ORIE
 
 internal fun oneKeyChartDialogUsePlatformDefaultWidth(): Boolean = false
 
+/** 机械动作等待结果转失败原因：完成返回 null，出错返回设备状态码，超时返回 "timeout"。 */
+private fun WaitResult.failReason(): String? = when (this) {
+    is WaitResult.Completed -> null
+    is WaitResult.DeviceError -> raw
+    is WaitResult.Timeout -> "timeout"
+}
+
 internal data class OneKeyChartData(
     val slopeRegions: List<TestModeSlopeRegion>,
     val entrySets: List<List<FloatEntry>>,
@@ -1006,30 +1014,30 @@ class SampleSerialViewModel : ViewModel() {
     fun moveIn() {
         commandJob = viewModelScope.launch {
             text.value = ("片仓移入中。。。")
-            withContext(Dispatchers.IO) {
+            val reason = withContext(Dispatchers.IO) {
                 val moveToSsResult =
                     CtlCommandsV2.readAllData(CtlCommandsV2.moveIn())
                 Timber.d("moveToSsResult: $moveToSsResult")
 
-                // 等待成功
-                CtlCommandsV2.waitMoveToSsStatusSuccess()
+                // 等待完成，取失败原因
+                CtlCommandsV2.awaitMoveToSs().failReason()
             }
-            text.value = ("片仓移入 success")
+            text.value = if (reason == null) "片仓移入 success" else "片仓移入 failed: $reason"
         }
     }
 
     fun moveOut() {
         commandJob = viewModelScope.launch {
             text.value = ("片仓移出中。。。")
-            withContext(Dispatchers.IO) {
+            val reason = withContext(Dispatchers.IO) {
                 val moveToSsResult =
                     CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
                 Timber.d("moveToSsResult: $moveToSsResult")
 
-                // 等待成功
-                CtlCommandsV2.waitMoveToSsStatusSuccess()
+                // 等待完成，取失败原因
+                CtlCommandsV2.awaitMoveToSs().failReason()
             }
-            text.value = ("片仓移出 success")
+            text.value = if (reason == null) "片仓移出 success" else "片仓移出 failed: $reason"
         }
     }
 
@@ -1047,7 +1055,7 @@ class SampleSerialViewModel : ViewModel() {
     fun absorb() {
         commandJob = viewModelScope.launch {
             text.value = ("吸水中。。。")
-            val moveErrorCode = withContext(Dispatchers.IO) {
+            val message = withContext(Dispatchers.IO) {
                 val result = CtlCommandsV2.readAllData(CtlCommandsV2.absorb(240 * 1000))
 
                 withContext(Dispatchers.Main) {
@@ -1055,23 +1063,23 @@ class SampleSerialViewModel : ViewModel() {
                         ("吸水 $result")
                 }
 
-                CtlCommandsV2.waitAbsorbStatusSuccess()
-
-                // 吸水后移入芯片
-                CtlCommandsV2.moveChipInAfterAbsorb()
+                val absorbReason = CtlCommandsV2.awaitAbsorb().failReason()
+                if (absorbReason != null) {
+                    "吸水 failed: $absorbReason"
+                } else {
+                    // 吸水后移入芯片
+                    val moveErrorCode = CtlCommandsV2.moveChipInAfterAbsorb()
+                    if (moveErrorCode.isEmpty()) "吸水 success" else "吸水后芯片移入失败: $moveErrorCode"
+                }
             }
-            text.value = if (moveErrorCode.isEmpty()) {
-                ("吸水 success")
-            } else {
-                ("吸水后芯片移入失败: $moveErrorCode")
-            }
+            text.value = message
         }
     }
 
     fun scanCard() {
         commandJob = viewModelScope.launch {
             text.value = ("扫描中。。。")
-            withContext(Dispatchers.IO) {
+            val reason = withContext(Dispatchers.IO) {
                 val getLDPwr =
                     CtlCommandsV2.readAllData(CtlCommandsV2.getLDPwr())
 
@@ -1096,10 +1104,9 @@ class SampleSerialViewModel : ViewModel() {
                         ("扫描 $result")
                 }
 
-                CtlCommandsV2.waitScanStatusSuccess()
+                CtlCommandsV2.awaitScan().failReason()
             }
-            text.value =
-                ("扫描 success")
+            text.value = if (reason == null) "扫描 success" else "扫描 failed: $reason"
         }
     }
 
@@ -1203,20 +1210,22 @@ class SampleSerialViewModel : ViewModel() {
         commandJob = viewModelScope.launch {
             text.value = ("仓片复位中。。。")
 
-            withContext(Dispatchers.IO) {
+            val message = withContext(Dispatchers.IO) {
                 CtlCommandsV2.readAllData(CtlCommandsV2.homing())
                 // 轮询等待复位完成；delay 可被取消，"取消指令"后立即停止轮询
-                CtlCommandsV2.waitHomingStatusSuccess()
+                if (!CtlCommandsV2.waitHomingStatusSuccess()) {
+                    return@withContext "仓片复位 failed: 归零失败"
+                }
 
                 val moveToSsResult =
                     CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
                 Timber.w("moveToSsResult: $moveToSsResult")
 
-                // 等待成功
-                CtlCommandsV2.waitMoveToSsStatusSuccess()
+                // 等待完成，取失败原因
+                val reason = CtlCommandsV2.awaitMoveToSs().failReason()
+                if (reason == null) "仓片复位 success" else "仓片复位 failed: $reason"
             }
-
-            text.value = ("仓片复位 success")
+            text.value = message
         }
     }
 
@@ -1755,6 +1764,13 @@ class SampleSerialViewModel : ViewModel() {
             val result = CtlCommandsV2.readAllData(CtlCommandsV2.poll())
             Timber.w("one key $actionName pollResult: $result")
             if (result.startsWith(CtlConstantsV2.RESULT_ERROR_PREFIX)) {
+                throw IOException("$actionName 失败: $result")
+            }
+            // 先判错误再判完成：同一成功帧可能带 ERROR 状态码（如 !|...s:ERROR-h move err），
+            // 必须按状态码报错，不能漏判后拖到超时、错报为"超时"。
+            if (result.startsWith(CtlConstantsV2.RESULT_SUCCESS_PREFIX) &&
+                result.contains(CtlConstantsV2.CMD_ACTION_STATUS_ERROR)
+            ) {
                 throw IOException("$actionName 失败: $result")
             }
             if (result.startsWith(CtlConstantsV2.RESULT_SUCCESS_PREFIX) && isCompleted(result)) {

@@ -101,39 +101,32 @@ class HomeWorkPreViewModel : ViewModel() {
                 }
             }
 
-            withContext(Dispatchers.IO) {
-                CtlCommandsV2.readAllData(CtlCommandsV2.homing())
+            if (!runInitSequence()) {
+                // 归零/移动多次重试仍失败：回到起始步骤，允许用户重试初始化
+                Timber.e("init mechanical sequence failed after retries; resetting")
+                onReset()
+                return@launch
             }
-            homingSuccess()
+
+            progress.value = 100
+            AppParams.initState = true
+            step.value++
 
             App.getSerialHelper().reconnect()
         }
     }
 
-    private suspend fun homingSuccess() {
-        withContext(Dispatchers.IO) {
-            CtlCommandsV2.waitHomingStatusSuccess { progress.value = it }
+    /**
+     * 初始化机械动作序列：归零 -> 弹出 -> 关门，每步带归零重试。
+     * 任一步多次重试仍失败返回 false，由调用方重置并让用户重试。
+     */
+    private suspend fun runInitSequence(): Boolean = withContext(Dispatchers.IO) {
+        if (!CtlCommandsV2.homingWithRetry { progress.value = it }) return@withContext false
 
-            // 负弹出，正进入
-            val moveToSsResult =
-                CtlCommandsV2.readAllData(CtlCommandsV2.moveOut())
-            Timber.d("moveToSsResult: $moveToSsResult")
+        // 负弹出，正进入
+        if (!CtlCommandsV2.moveOutWithRetry()) return@withContext false
+        progress.value = 95
 
-            // 等待成功
-            CtlCommandsV2.waitMoveToSsStatusSuccess()
-
-            progress.value = 95
-
-            val moveDurationResult =
-                CtlCommandsV2.readAllData(CtlCommandsV2.closeDoor())
-            Timber.w("moveDurationResult: $moveDurationResult")
-
-            // 等待成功
-            CtlCommandsV2.waitMoveDurationStatusSuccess()
-        }
-
-        progress.value = 100
-        AppParams.initState = true
-        step.value++
+        CtlCommandsV2.closeDoorWithRetry()
     }
 }
