@@ -33,8 +33,12 @@ object TestModePointChartData {
 
     /** 波形左右边界搜索调参 */
     private object BoundarySearch {
-        /** 区域跨度上限，从上升起点起算 */
-        const val MAX_REGION_X = 400.0
+        /**
+         * 区域跨度上限，从上升起点起算。缓慢的宽波（起点在波谷、缓升到峰再缓降到基线）整段跨度
+         * 可达 ~480；上限过小会从起点截断，把下降段尾部砍掉。取 500 覆盖真机可见的最宽单波，
+         * 又足以拦住越界失控的假区域（真实/黄金样本单波跨度均 <300，不受影响）。
+         */
+        const val MAX_REGION_X = 500.0
 
         /** 斜率取样窗口：跨若干点取斜率，抵抗逐点噪声（左边界回退与尾部平稳判定共用） */
         const val SLOPE_SAMPLE_X = 5.0
@@ -48,11 +52,51 @@ object TestModePointChartData {
         /** 前方"陡降"阈值 = 最陡坡度 × 此比例，需明显高于平坦阈值，谷底缓降不算陡降 */
         const val STEEP_DROP_RATIO = 0.3
 
+        /**
+         * 尾部"谷底回升即视为下一个波"判据的相对深度门槛：回升起算的谷底相对波峰的下探深度，
+         * 需达到波幅（峰−起点）的此比例，才认定是真正的波间谷底。否则只是波内的肩部/次峰凹陷
+         * （幅度 50 的绝对阈值对幅度数千的 ADC 波形过于敏感，主峰后一个浅凹再回升就会被当成新波，
+         * 把整个下降段砍掉）。真正的波间谷底会回落到接近基线，浅肩凹陷仍高悬在峰附近。
+         */
+        const val NEW_WAVE_TROUGH_DEPTH_RATIO = 0.4
+
         /** 左边界回看：坡度超过此值视为上升仍在继续（肩部平台需要继续向左走） */
         const val STEEP_RISE_MIN_SLOPE = 1.0
 
         /** 幅度低于噪声底的波动不算"小波"，向左跳过时到此为止，防止爬过整段平坦谷底 */
         const val SMALL_WAVE_NOISE_FLOOR_Y = 10.0
+
+        /**
+         * 左边界回退的"净上升"判据窗口与阈值。逐点坡度判据（hasSteepRiseBehind）会把基线上
+         * 的小纹波误当作"上升仍在继续"，导致左边界爬过整段波谷间基线锚死在很靠左处，再经
+         * MAX_REGION_X 从错误起点截断，把真实波形的整个下降段砍掉。净上升判据看窗口两端的
+         * 净高差：真实上升沿即便缓慢也有明确净上升，而基线纹波在窗口内净变化≈0，据此在波脚停住。
+         */
+        const val NET_RISE_SCAN_X = 20.0
+        const val NET_RISE_MIN_Y = 5.0
+
+        /**
+         * 尾部"前方仍有陡降"判据的净下降窗口与阈值。与 hasSteepDropAhead 同理：逐点判据会把
+         * 基线上的单点纹波（一两点内 -5~-7 的尖跌）误当作"波形仍在下降"，导致尾部越过整段平坦
+         * 基线一直延伸到很靠后。净下降判据看窗口两端净高差：真正未结束的下降在窗口内有明确净
+         * 跌幅，而平坦基线的纹波净变化≈0，据此在陡降转平缓的拐点停住。
+         */
+        const val NET_DROP_SCAN_X = 30.0
+        const val NET_DROP_MIN_Y = 20.0
+
+        /**
+         * 尾部兜底继续判据的绝对净跌幅阈值：下降沿上短暂的肩部平台会误触发停止，但其后仍有大幅净
+         * 下降通向真正波谷时应继续。取较大的绝对量（远大于缓降settle的净跌幅、又小于陡降沿），
+         * 只对幅度数千的 ADC 真机波形生效，不影响幅度很小的单元测试合成波。
+         */
+        const val NET_DROP_CONTINUE_Y = 200.0
+
+        /**
+         * 左边界"越过凸起"判据：向左窗口内若有低于当前点超过 此比例×minPeakTroughYDiff 的地面，
+         * 说明真正的波脚还在更左，当前只是踩在双峰/肩部的凸起上，应继续向左。比例取 3，足以跨过
+         * 峰间浅凹旁的小凸起，又不会在真正波脚（左侧即基线，无明显更低地面）误判。
+         */
+        const val LOWER_GROUND_MIN_Y_RATIO = 3.0
     }
 
     fun parsePoints(workPoints: String): List<CasePoint> {
@@ -106,17 +150,19 @@ object TestModePointChartData {
         var index = 1
 
         while (index < points.lastIndex) {
-            if (!isPeak(points, index, minPeakTroughYDiff)) {
+            if (!isPeak(points, index, minPeakTroughYDiff) &&
+                !isWideFlatTopOnset(points, index, minPeakTroughYDiff)
+            ) {
                 index++
                 continue
             }
 
             val currentPeakFallback = index
 
-            val riseStartIndex = findLeftFlatPoint(points, index, flatSlopeThreshold)
+            val riseStartIndex = findLeftFlatPoint(points, index, flatSlopeThreshold, minPeakTroughYDiff)
             var startIndex = skipSmallWavesOnLeft(points, riseStartIndex, minPeakTroughYDiff)
 
-            var endIndex = findRightFlatPoint(points, index, flatSlopeThreshold, minPeakTroughYDiff)
+            var endIndex = findRightFlatPoint(points, index, startIndex, flatSlopeThreshold, minPeakTroughYDiff)
 
             if (points[endIndex].x - points[startIndex].x < minRegionXDistance) {
                 index = maxOf(index + 1, currentPeakFallback + 1)
@@ -126,7 +172,7 @@ object TestModePointChartData {
             var peakIndex = findHighestPoint(points, startIndex, endIndex)
             var iterations = 0
             while (iterations < 10) {
-                val recalculatedEndIndex = findRightFlatPoint(points, peakIndex, flatSlopeThreshold, minPeakTroughYDiff)
+                val recalculatedEndIndex = findRightFlatPoint(points, peakIndex, startIndex, flatSlopeThreshold, minPeakTroughYDiff)
                 val recalculatedPeakIndex = findHighestPoint(points, startIndex, recalculatedEndIndex)
 
                 if (recalculatedEndIndex == endIndex && recalculatedPeakIndex == peakIndex) {
@@ -138,12 +184,15 @@ object TestModePointChartData {
             }
 
             // 以最终波峰重新回推左边界：首次触发点可能落在噪声小包上，起点会被锚死在错误位置，
-            // 进而导致跨度上限从错误起点截断出假波
-            startIndex = skipSmallWavesOnLeft(
+            // 进而导致跨度上限从错误起点截断出假波。此步只能向左延伸起点、绝不向右收缩：宽/圆
+            // 顶波的波峰处近乎平坦（净上升≈0），从波峰回推会当场停在顶附近，反而把已找到的正确
+            // 起点收窄到波形内部。取二者更靠左的一个即可两头兼顾。
+            val reLeftStart = skipSmallWavesOnLeft(
                 points,
-                findLeftFlatPoint(points, peakIndex, flatSlopeThreshold),
+                findLeftFlatPoint(points, peakIndex, flatSlopeThreshold, minPeakTroughYDiff),
                 minPeakTroughYDiff,
             )
+            startIndex = minOf(startIndex, reLeftStart)
 
             val maxEndX = points[startIndex].x + BoundarySearch.MAX_REGION_X
             if (points[endIndex].x > maxEndX) {
@@ -158,6 +207,21 @@ object TestModePointChartData {
             startIndex = adjStart
             endIndex = adjEnd
             peakIndex = adjPeak
+
+            // 最终区域必须包含触发峰。否则说明触发点是基线上的小凸起，其向后搜索越过了真实波、
+            // findHighestPoint 把波峰迁移到了更靠后的更高波上——若按 endIndex+1 前进，会把触发点与
+            // 该波之间的真实波整段跳过（漏检）。此时只前进一步，让真实波的波峰自行触发。
+            if (currentPeakFallback < startIndex || currentPeakFallback > endIndex) {
+                index = currentPeakFallback + 1
+                continue
+            }
+
+            // 与上一个已接收区域重叠：说明尾部的小凸起触发后向左越过波峰，把同一个波又检了一遍
+            // （起点/波峰相同、末端不同）。丢弃这个重复区域，只前进一步。
+            if (regions.isNotEmpty() && startIndex < regions.last().endIndex) {
+                index = currentPeakFallback + 1
+                continue
+            }
 
             if (points[endIndex].x - points[startIndex].x < minRegionXDistance ||
                 points[peakIndex].y - points[startIndex].y < minPeakTroughYDiff) {
@@ -214,6 +278,45 @@ object TestModePointChartData {
                 y - rightMin > threshold
     }
 
+    /**
+     * 宽平顶（削顶/饱和）波的波峰识别兜底。isPeak 要求波峰两侧都在 WIDE_WINDOW_X 内跌落，宽度
+     * 超过 2×WIDE_WINDOW_X 的平顶平台里没有任何一点能同时看到两侧的跌落，于是整段波不触发、被漏检。
+     * 这里只在 isPeak 覆盖不到的"宽平顶"上补一个触发点（平台前沿），不改动 isPeak，故窄平台/普通波
+     * 的既有行为完全不变。
+     */
+    private fun isWideFlatTopOnset(points: List<CasePoint>, index: Int, minPeakTroughYDiff: Double): Boolean {
+        if (index == 0 || index >= points.lastIndex) return false
+        val y = points[index].y
+        val threshold = minOf(PeakDetect.MIN_RISE_DROP_Y, minPeakTroughYDiff)
+
+        // 平台前沿：上一点位于平台带之下（说明是刚升上来的前沿，只在此触发一次）
+        if (y - points[index - 1].y <= threshold) return false
+
+        // 向右量取平顶平台的宽度（带内视为同一平台）
+        var runEnd = index
+        while (runEnd < points.lastIndex && abs(points[runEnd + 1].y - y) <= threshold) {
+            runEnd++
+        }
+        // 窄平台由 isPeak 处理，避免与其重复触发
+        if (points[runEnd].x - points[index].x <= 2 * PeakDetect.WIDE_WINDOW_X) return false
+
+        // 平台之后右侧必须跌落到平台带之下
+        var afterPlateau = runEnd
+        while (afterPlateau < points.lastIndex && y - points[afterPlateau].y <= threshold) {
+            afterPlateau++
+        }
+        if (y - points[afterPlateau].y <= threshold) return false
+
+        // 左侧宽窗内确有升入平台的跌落
+        var leftMin = points[index - 1].y
+        var left = index - 1
+        while (left >= 0 && points[index].x - points[left].x <= PeakDetect.WIDE_WINDOW_X) {
+            leftMin = minOf(leftMin, points[left].y)
+            left--
+        }
+        return y - leftMin > threshold
+    }
+
     private fun findHighestPoint(points: List<CasePoint>, startIndex: Int, endIndex: Int): Int {
         var maxIndex = startIndex
         for (index in startIndex..endIndex) {
@@ -224,7 +327,12 @@ object TestModePointChartData {
         return maxIndex
     }
 
-    private fun findLeftFlatPoint(points: List<CasePoint>, peakIndex: Int, flatSlopeThreshold: Double): Int {
+    private fun findLeftFlatPoint(
+        points: List<CasePoint>,
+        peakIndex: Int,
+        flatSlopeThreshold: Double,
+        minPeakTroughYDiff: Double,
+    ): Int {
         var index = peakIndex
         var steepestRise = 0.0
         while (index > 0) {
@@ -233,14 +341,50 @@ object TestModePointChartData {
                 steepestRise = slopeValue
             }
             val effectiveFlat = maxOf(flatSlopeThreshold, steepestRise * BoundarySearch.ADAPTIVE_FLAT_RATIO)
-            if (slopeValue <= effectiveFlat &&
-                !hasSteepRiseBehind(points, index, maxOf(BoundarySearch.STEEP_RISE_MIN_SLOPE, steepestRise * BoundarySearch.ADAPTIVE_FLAT_RATIO))
+            // 上升仍在继续，需两个判据同时成立：逐点仍有陡升段，且窗口内确有净上升。
+            // 只要有一个判据认为已进入基线（纹波无净上升）就在此停住，避免爬过波谷间基线。
+            val stillRising =
+                hasSteepRiseBehind(points, index, maxOf(BoundarySearch.STEEP_RISE_MIN_SLOPE, steepestRise * BoundarySearch.ADAPTIVE_FLAT_RATIO)) &&
+                    hasNetRiseBehind(points, index)
+            // 平顶（削顶/饱和）波：波峰是一段近似等值的平台（削顶还带纹波）。触发点落在宽平台内部时，
+            // 净上升窗口整段都在平台上（净差≈0），会误判为"已到基线"而当场停住，使起点=波峰、波幅≈0
+            // 被丢弃。仅当已从波峰下降超过一个顶部容差带（取 minPeakTroughYDiff，足以容纳削顶纹波、
+            // 又小于任何合格波的波幅）后才允许平坦停止，从而先越过平台走到真正的上升沿再到波脚。
+            // 双峰/肩部波：峰后（此处为峰左）有一个浅的峰间凹陷，凹陷紧邻的一侧又是个小凸起。
+            // 在凹陷处 net-rise 窗口看到的相邻侧更高（净上升为负），会误判为已到波脚而停住，把起点
+            // 卡在波形内部的凹陷上。若在扫描窗口内更靠左处仍有明显更低的地面（说明真正的上升沿/波脚
+            // 还在更左），则说明当前只是踩在一个凸起上，应继续向左越过它。
+            if (slopeValue <= effectiveFlat && !stillRising &&
+                points[peakIndex].y - points[index].y > minPeakTroughYDiff &&
+                !hasLowerGroundBehind(points, index, minPeakTroughYDiff)
             ) {
                 break
             }
             index--
         }
         return index
+    }
+
+    /** 向左 STEEP_SCAN_X 窗口内是否仍有明显更低的地面（低于当前点超过 3×minPeakTroughYDiff）。 */
+    private fun hasLowerGroundBehind(points: List<CasePoint>, fromIndex: Int, minPeakTroughYDiff: Double): Boolean {
+        val limitX = points[fromIndex].x - BoundarySearch.STEEP_SCAN_X
+        var minBehind = points[fromIndex].y
+        var i = fromIndex - 1
+        while (i >= 0 && points[i].x >= limitX) {
+            minBehind = minOf(minBehind, points[i].y)
+            i--
+        }
+        return points[fromIndex].y - minBehind > BoundarySearch.LOWER_GROUND_MIN_Y_RATIO * minPeakTroughYDiff
+    }
+
+    /** 从 fromIndex 向左取 NET_RISE_SCAN_X 窗口，窗口两端净高差超过阈值才算"仍在上升沿" */
+    private fun hasNetRiseBehind(points: List<CasePoint>, fromIndex: Int): Boolean {
+        val limitX = points[fromIndex].x - BoundarySearch.NET_RISE_SCAN_X
+        var back = fromIndex
+        while (back > 0 && points[back - 1].x >= limitX) {
+            back--
+        }
+        return points[fromIndex].y - points[back].y > BoundarySearch.NET_RISE_MIN_Y
     }
 
     /** 从 index 向左跨取样窗口的斜率，抵抗逐点噪声（窗口内无点时退化为相邻点） */
@@ -303,10 +447,13 @@ object TestModePointChartData {
     private fun findRightFlatPoint(
         points: List<CasePoint>,
         peakIndex: Int,
+        startIndex: Int,
         flatSlopeThreshold: Double,
         minPeakTroughYDiff: Double,
     ): Int {
         val peakY = points[peakIndex].y
+        // 波幅（峰−起点），用于把"波间谷底"与"波内浅凹"区分开
+        val amplitude = peakY - points[startIndex].y
         // 下降 5%，但不超过波形最小高度：ADC 基线较高时 5% 绝对值可能永远达不到
         val dropThreshold = minOf(peakY * 0.05, minPeakTroughYDiff)
 
@@ -338,9 +485,14 @@ object TestModePointChartData {
             if (points[tail].y < points[minIndex].y) {
                 minIndex = tail
             }
-            // 从谷底重新上涨超过阈值说明下一个波开始了，尾部就是谷底
+            // 从谷底重新上涨超过阈值说明下一个波开始了，尾部就是谷底。但仅当谷底确实回落到接近
+            // 基线（相对波幅下探足够深）才算波间谷底；否则只是主峰后的肩部/次峰浅凹，继续向后走，
+            // 否则会把双峰波在第一个峰间凹陷处截断，砍掉整个下降段。
             if (points[tail].y - points[minIndex].y > minPeakTroughYDiff) {
-                return minIndex
+                val troughDepth = peakY - points[minIndex].y
+                if (amplitude <= 0.0 || troughDepth >= amplitude * BoundarySearch.NEW_WAVE_TROUGH_DEPTH_RATIO) {
+                    return minIndex
+                }
             }
 
             // 斜率在前向窗口上取样，逐点噪声不会打断平稳段计数
@@ -356,9 +508,15 @@ object TestModePointChartData {
                 stableCount++
                 if (stableCount >= 10) {
                     // 双峰间的平台：前方还有明显陡降说明波形未结束，继续向后走；
-                    // 陡降阈值远高于平坦阈值，谷底的缓慢下坡不算
+                    // 陡降阈值远高于平坦阈值，谷底的缓慢下坡不算。再叠加"净下降"判据，
+                    // 否则平坦基线上的单点纹波尖跌会被当成陡降，把尾部一直拖到很靠后。
+                    // 另一路兜底：下降沿上偶有短暂的肩部平台会误触发停止，但其后仍有大幅净下降通向真正
+                    // 波谷（前方净跌幅超过 NET_DROP_CONTINUE_Y 的绝对量），此时也继续，避免在肩部截断。
                     val steepThreshold = maxOf(flatSlopeThreshold, abs(steepestDrop) * BoundarySearch.STEEP_DROP_RATIO)
-                    if (hasSteepDropAhead(points, tail, steepThreshold)) {
+                    val stillDescending =
+                        (hasSteepDropAhead(points, tail, steepThreshold) && hasNetDropAhead(points, tail)) ||
+                            netDropAheadAmount(points, tail) > BoundarySearch.NET_DROP_CONTINUE_Y
+                    if (stillDescending) {
                         stableCount = 0
                     } else {
                         return tail
@@ -371,6 +529,21 @@ object TestModePointChartData {
         }
 
         return tail
+    }
+
+    /** 从 fromIndex 向右取 NET_DROP_SCAN_X 窗口的净跌幅（正值表示仍在下降）。 */
+    private fun netDropAheadAmount(points: List<CasePoint>, fromIndex: Int): Double {
+        val limitX = points[fromIndex].x + BoundarySearch.NET_DROP_SCAN_X
+        var ahead = fromIndex
+        while (ahead < points.lastIndex && points[ahead + 1].x <= limitX) {
+            ahead++
+        }
+        return points[fromIndex].y - points[ahead].y
+    }
+
+    /** 从 fromIndex 向右取 NET_DROP_SCAN_X 窗口，窗口两端净跌幅超过阈值才算"前方仍在真正下降" */
+    private fun hasNetDropAhead(points: List<CasePoint>, fromIndex: Int): Boolean {
+        return netDropAheadAmount(points, fromIndex) > BoundarySearch.NET_DROP_MIN_Y
     }
 
     /** 前向扫描窗口内是否仍有连续陡降段（双峰间的平台说明波形未结束） */
