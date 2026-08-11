@@ -415,10 +415,12 @@ class AfterSaleVersionUpgradeViewModel : ViewModel() {
 
             val destinationFile = File(downloadDirectory, fileName)
 
-            // 如果文件已存在，先删除
-            if (destinationFile.exists()) {
-                destinationFile.delete()
-            }
+            // 下载前清理历史升级包：文件名带版本号，不同版本会各留一份，长期累积占满存储。
+            // 安装界面无完成回调，无法在安装后删除当前包，因此在下载前统一清掉旧包（含同名的未完成残留），
+            // 也顺带为本次下载腾出空间。最多只会残留最近一次成功下载的那一份，留待下次升级清理。
+            downloadDirectory?.listFiles { file ->
+                file.name.startsWith("app_update_") && file.name.endsWith(".apk")
+            }?.forEach { it.delete() }
 
             // 创建下载请求
             val downloadManager =
