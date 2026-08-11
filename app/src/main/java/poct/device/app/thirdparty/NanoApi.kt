@@ -16,7 +16,6 @@ import poct.device.app.BuildConfig
 import poct.device.app.R
 import poct.device.app.bean.ConfigInfoBean
 import poct.device.app.bean.ConfigInfoV2Bean
-import poct.device.app.bean.ConfigSysBean
 import poct.device.app.entity.service.SysConfigService
 import poct.device.app.thirdparty.model.nano.NanoActivateReq
 import poct.device.app.thirdparty.model.nano.NanoActivateResp
@@ -49,8 +48,8 @@ import com.google.gson.JsonObject
  *   POST /kino/biomarkers
  *   POST /kino/kino-result
  *
- * Active when ConfigSysBean.flow == "nano". Reads baseUrl + deviceId from
- * ConfigSysBean each call so changes in Settings take effect without restart.
+ * Active when the system flow == "nano". Reads baseUrl from runtime config each
+ * call so changes in Settings take effect without restart.
  */
 object NanoApi {
     const val FLOW_CLINICAL = "clinical"
@@ -70,9 +69,6 @@ object NanoApi {
     }
     private val JSON = "application/json".toMediaType()
 
-    private suspend fun config(): ConfigSysBean =
-        SysConfigService.findBean(ConfigSysBean.PREFIX, ConfigSysBean::class)
-
     private fun baseUrl(): String = AppParams.runtimeModeState.nanoBaseUrl().trimEnd('/')
 
     private fun activationToken(): String = AppParams.kinoActivationToken().trim()
@@ -88,8 +84,6 @@ object NanoApi {
             base
         }
     }
-
-    suspend fun deviceSerial(): String = config().nanoDeviceId
 
     private fun Request.Builder.withAuth(token: String): Request.Builder =
         NanoAuthSupport.bearerHeader(token)?.let { header("Authorization", it) } ?: this

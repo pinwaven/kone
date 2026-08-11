@@ -252,7 +252,7 @@
     <string name="sys_config_sys_f_flow">Test flow:</string>
     <string name="sys_config_sys_f_flow_clinical">Clinical</string>
     <string name="sys_config_sys_f_flow_nano">Nano</string>
-    <string name="sys_config_sys_f_nano_device_id">Nano Device ID:</string>
+    <string name="sys_config_sys_f_empty_card_calibration">Empty Card Calibration:</string>
     <string name="sys_config_inner">Internal settings</string>
     <string name="sys_config_inner_exit">Confirm to exit system configuration？</string>
     <string name="sys_config_inner_modify">Edit internal settings</string>

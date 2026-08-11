@@ -252,7 +252,7 @@
     <string name="sys_config_sys_f_flow">检测流程:</string>
     <string name="sys_config_sys_f_flow_clinical">临床</string>
     <string name="sys_config_sys_f_flow_nano">Nano</string>
-    <string name="sys_config_sys_f_nano_device_id">Nano 设备号:</string>
+    <string name="sys_config_sys_f_empty_card_calibration">空卡校准:</string>
     <string name="sys_config_inner">内部设置</string>
     <string name="sys_config_inner_exit">确定要退出设置修改？</string>
     <string name="sys_config_inner_modify">修改内部设置</string>

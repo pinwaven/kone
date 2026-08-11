@@ -15,13 +15,17 @@ data class ConfigSysBean(
     // Nano AI flow toggle. Empty is treated as the default Nano flow for
     // devices that have not persisted this setting yet.
     var flow: String = FLOW_NANO,
-    var nanoDeviceId: String = "",  // matches nano kino_devices.serial_number
+
+    // 空卡校准开关：y/n，默认关闭（n）
+    var emptyCardCalibration: String = TOGGLE_OFF,
 
 ) : ConfigBean {
     companion object {
         const val PREFIX = "sys_"
         const val FLOW_CLINICAL = "clinical"
         const val FLOW_NANO = "nano"
+        const val TOGGLE_ON = "y"
+        const val TOGGLE_OFF = "n"
         val Empty = ConfigSysBean()
 
         fun defaultFlow(flow: String): String =
@@ -29,5 +33,7 @@ data class ConfigSysBean(
 
         fun isNanoFlow(flow: String): Boolean =
             defaultFlow(flow) == FLOW_NANO
+
+        fun isEmptyCardCalibrationOn(value: String): Boolean = value == TOGGLE_ON
     }
 }

@@ -31,7 +31,6 @@ import poct.device.app.component.AppBottomBar
 import poct.device.app.component.AppConfirm
 import poct.device.app.component.AppFieldWrapper
 import poct.device.app.component.AppFilledButton
-import poct.device.app.component.AppTextField
 import poct.device.app.component.AppOutlinedButton
 import poct.device.app.component.AppPreviewWrapper
 import poct.device.app.component.AppRadioGroup
@@ -228,16 +227,18 @@ private fun SysConfigSysCombineForm(
                     onValueChange = { onBeanUpdate(bean.copy(flow = it)) }
                 )
             }
-            if (ConfigSysBean.isNanoFlow(bean.flow)) {
-                AppFieldWrapper(
-                    text = stringResource(id = R.string.sys_config_sys_f_nano_device_id),
-                ) {
-                    AppTextField(
-                        value = bean.nanoDeviceId,
-                        readOnly = readOnly,
-                        onValueChange = { onBeanUpdate(bean.copy(nanoDeviceId = it)) }
-                    )
-                }
+
+            // ── 空卡校准 ─────────────────────────────────────────────────────
+            AppFieldWrapper(
+                text = stringResource(id = R.string.sys_config_sys_f_empty_card_calibration),
+            ) {
+                AppRadioGroup(
+                    value = bean.emptyCardCalibration.ifEmpty { ConfigSysBean.TOGGLE_OFF },
+                    readOnly = readOnly,
+                    options = AppDictUtils.yesNoOptions(LocalContext.current),
+                    gap = 0.dp,
+                    onValueChange = { onBeanUpdate(bean.copy(emptyCardCalibration = it)) }
+                )
             }
         }
     }

@@ -684,8 +684,7 @@ class WorkMainViewModel : ViewModel() {
                                                     openid = bean.value.patientId,
                                                     testType = "kino_chip",
                                                     testData = testData,
-                                                    kinoDeviceId =
-                                                            NanoApi.deviceSerial().ifEmpty { null },
+                                                    kinoDeviceId = null,
                                             )
                                     )
                             Timber.w(
@@ -726,7 +725,7 @@ class WorkMainViewModel : ViewModel() {
                                                             "bioage_profile" to nanoProfile,
                                                     ),
                                             bioAge = nanoProfile?.bioAge,
-                                            kinoDeviceId = NanoApi.deviceSerial().ifEmpty { null },
+                                            kinoDeviceId = null,
                                     )
                             )
                         } else {
