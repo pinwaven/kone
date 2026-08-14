@@ -510,6 +510,64 @@ class TestModePointChartDataTest {
     }
 
     @Test
+    fun findSlopeRegionsFiltersSmallNoiseWaveByDefault() {
+        // 主波(波幅100) + 一个通过绝对下限但相对主波极小的噪声小波(波幅8 < 10%)。
+        // 默认开启噪声过滤 -> 小波被丢弃；关闭 -> 保留。
+        val points =
+                listOf(
+                        CasePoint(0.0, 0.0),
+                        CasePoint(20.0, 50.0),
+                        CasePoint(40.0, 100.0),
+                        CasePoint(60.0, 50.0),
+                        CasePoint(80.0, 0.0),
+                        CasePoint(100.0, 0.0),
+                        CasePoint(120.0, 0.0),
+                        CasePoint(140.0, 0.0),
+                        CasePoint(160.0, 4.0),
+                        CasePoint(180.0, 8.0),
+                        CasePoint(200.0, 4.0),
+                        CasePoint(220.0, 0.0),
+                        CasePoint(240.0, 0.0),
+                )
+
+        val filtered = TestModePointChartData.findSlopeRegions(points, minPeakTroughYDiff = 5.0)
+        assertEquals(1, filtered.size)
+        assertEquals(40.0, filtered[0].peakPoint.x, 0.0)
+
+        val unfiltered =
+                TestModePointChartData.findSlopeRegions(
+                        points,
+                        minPeakTroughYDiff = 5.0,
+                        filterNoiseWaves = false,
+                )
+        assertEquals(2, unfiltered.size)
+    }
+
+    @Test
+    fun findSlopeRegionsKeepsComparableWavesWhenFiltering() {
+        // 两个量级相近的波(波幅100与90)都应保留，不误删。
+        val points =
+                listOf(
+                        CasePoint(0.0, 0.0),
+                        CasePoint(20.0, 50.0),
+                        CasePoint(40.0, 100.0),
+                        CasePoint(60.0, 50.0),
+                        CasePoint(80.0, 0.0),
+                        CasePoint(100.0, 0.0),
+                        CasePoint(120.0, 0.0),
+                        CasePoint(140.0, 0.0),
+                        CasePoint(160.0, 45.0),
+                        CasePoint(180.0, 90.0),
+                        CasePoint(200.0, 45.0),
+                        CasePoint(220.0, 0.0),
+                        CasePoint(240.0, 0.0),
+                )
+
+        val regions = TestModePointChartData.findSlopeRegions(points, minPeakTroughYDiff = 5.0)
+        assertEquals(2, regions.size)
+    }
+
+    @Test
     fun findSlopeRegionsFollowsThroughShoulderToTroughOnFirstWave() {
         // 真机采样：第 1 波下降沿(峰 idx217)上有个短暂的肩部平台(≈idx316~324)，尾部平稳计数在此
         // 误触发停止，末端停在 ≈319/323，而其后仍有明显下降通向真正波谷(≈idx370)后升入第 2 波。

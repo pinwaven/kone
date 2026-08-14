@@ -22,6 +22,9 @@ object TestModePointChartData {
     private const val DEFAULT_MIN_REGION_X_DISTANCE = 75.0
     private const val DEFAULT_MIN_PEAK_TROUGH_Y_DIFF = 50.0
 
+    /** 噪声小波过滤：波幅低于最高波此比例的区域判为噪声丢弃。 */
+    private const val NOISE_WAVE_AMP_RATIO = 0.1
+
     /** 波峰判定调参：近窗做局部最大检查，宽窗做左涨/右跌幅度检查（慢波在近窗内跌幅不足） */
     private object PeakDetect {
         const val NEAR_WINDOW_X = 20.0
@@ -143,6 +146,7 @@ object TestModePointChartData {
         flatSlopeThreshold: Double = DEFAULT_FLAT_SLOPE_THRESHOLD,
         minRegionXDistance: Double = DEFAULT_MIN_REGION_X_DISTANCE,
         minPeakTroughYDiff: Double = DEFAULT_MIN_PEAK_TROUGH_Y_DIFF,
+        filterNoiseWaves: Boolean = true,
     ): List<TestModeSlopeRegion> {
         if (points.size < 3) return emptyList()
 
@@ -242,7 +246,24 @@ object TestModePointChartData {
             )
             index = maxOf(index + 1, endIndex + 1)
         }
-        return regions
+        return if (filterNoiseWaves) dropNoiseWaves(regions) else regions
+    }
+
+    /** 区域的波幅：波峰相对自身基线（起点/终点较低者）的高度。 */
+    private fun regionAmplitude(region: TestModeSlopeRegion): Double =
+        region.peakPoint.y - minOf(region.startPoint.y, region.endPoint.y)
+
+    /**
+     * 检测完成后过滤噪声小波：相对最高波，波幅不足 NOISE_WAVE_AMP_RATIO 的判为噪声丢弃。
+     * 用相对判据而非绝对阈值（后者 minPeakTroughYDiff 检测阶段已用），以适配不同基线/增益：
+     * 通过了绝对下限、但相对主波极小的凸起才是噪声。最高波恒满足条件不会被清空。
+     */
+    private fun dropNoiseWaves(regions: List<TestModeSlopeRegion>): List<TestModeSlopeRegion> {
+        if (regions.size <= 1) return regions
+        val maxAmplitude = regions.maxOf(::regionAmplitude)
+        if (maxAmplitude <= 0.0) return regions
+        val threshold = maxAmplitude * NOISE_WAVE_AMP_RATIO
+        return regions.filter { regionAmplitude(it) >= threshold }
     }
 
     private fun isPeak(points: List<CasePoint>, index: Int, minPeakTroughYDiff: Double): Boolean {

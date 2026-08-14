@@ -331,7 +331,7 @@ private fun AppTopBarNanoEnvironmentBadge() {
                 shape = RoundedCornerShape(14.dp)
             )
             .padding(horizontal = 10.dp, vertical = 4.dp),
-        text = "${environment.label}环境",
+        text = environment.label,
         color = Color.White,
         fontSize = 12.sp,
         fontWeight = FontWeight.Bold,
