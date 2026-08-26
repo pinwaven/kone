@@ -226,8 +226,8 @@ fun TemporaryOperation(navController: NavController) {
                     Spacer(modifier = Modifier.height(12.dp))
                     TestModeConfigRow(
                         label = stringResource(id = R.string.test_mode_absorb_time),
-                        value = absorbTimeMillis,
-                        unit = stringResource(id = R.string.test_mode_millisecond_unit),
+                        value = millisToSecondsDisplay(absorbTimeMillis),
+                        unit = stringResource(id = R.string.test_mode_reaction_time_unit),
                         onClick = {
                             openTestModeConfigEdit(TestModeConfigField.ABSORB_TIME)
                         }
@@ -235,8 +235,8 @@ fun TemporaryOperation(navController: NavController) {
                     Spacer(modifier = Modifier.height(12.dp))
                     TestModeConfigRow(
                         label = stringResource(id = R.string.test_mode_scan_time),
-                        value = scanTimeMillis,
-                        unit = stringResource(id = R.string.test_mode_millisecond_unit),
+                        value = millisToSecondsDisplay(scanTimeMillis),
+                        unit = stringResource(id = R.string.test_mode_reaction_time_unit),
                         onClick = {
                             openTestModeConfigEdit(TestModeConfigField.SCAN_TIME)
                         }
@@ -254,8 +254,8 @@ fun TemporaryOperation(navController: NavController) {
             }
             val editingValue = when (editingField) {
                 TestModeConfigField.REACTION_TIME -> reactionTimeSeconds
-                TestModeConfigField.ABSORB_TIME -> absorbTimeMillis
-                TestModeConfigField.SCAN_TIME -> scanTimeMillis
+                TestModeConfigField.ABSORB_TIME -> millisToSecondsDisplay(absorbTimeMillis)
+                TestModeConfigField.SCAN_TIME -> millisToSecondsDisplay(scanTimeMillis)
                 TestModeConfigField.LASER_POWER -> laserPower
                 null -> ""
             }
@@ -267,9 +267,9 @@ fun TemporaryOperation(navController: NavController) {
                 null -> ""
             }
             val editingUnit = when (editingField) {
-                TestModeConfigField.REACTION_TIME -> stringResource(id = R.string.test_mode_reaction_time_unit)
+                TestModeConfigField.REACTION_TIME,
                 TestModeConfigField.ABSORB_TIME,
-                TestModeConfigField.SCAN_TIME -> stringResource(id = R.string.test_mode_millisecond_unit)
+                TestModeConfigField.SCAN_TIME -> stringResource(id = R.string.test_mode_reaction_time_unit)
                 TestModeConfigField.LASER_POWER,
                 null -> ""
             }
@@ -277,15 +277,15 @@ fun TemporaryOperation(navController: NavController) {
                 TestModeConfigField.ABSORB_TIME -> stringResource(
                     id = R.string.test_mode_value_range_with_unit,
                     "0",
-                    "300000",
-                    stringResource(id = R.string.test_mode_millisecond_unit)
+                    "300",
+                    stringResource(id = R.string.test_mode_reaction_time_unit)
                 )
 
                 TestModeConfigField.SCAN_TIME -> stringResource(
                     id = R.string.test_mode_value_range_with_unit,
                     "1",
-                    "300000",
-                    stringResource(id = R.string.test_mode_millisecond_unit)
+                    "300",
+                    stringResource(id = R.string.test_mode_reaction_time_unit)
                 )
 
                 TestModeConfigField.LASER_POWER -> stringResource(
@@ -308,8 +308,10 @@ fun TemporaryOperation(navController: NavController) {
                 onValueChange = { value ->
                     when (editingField) {
                         TestModeConfigField.REACTION_TIME -> reactionTimeSeconds = value.filter(Char::isDigit)
-                        TestModeConfigField.ABSORB_TIME -> absorbTimeMillis = value.filter(Char::isDigit)
-                        TestModeConfigField.SCAN_TIME -> scanTimeMillis = value.filter(Char::isDigit)
+                        TestModeConfigField.ABSORB_TIME ->
+                            absorbTimeMillis = secondsDisplayToMillis(value.filter(Char::isDigit))
+                        TestModeConfigField.SCAN_TIME ->
+                            scanTimeMillis = secondsDisplayToMillis(value.filter(Char::isDigit))
                         TestModeConfigField.LASER_POWER -> laserPower = value.filterSignedInt()
                         null -> Unit
                     }
@@ -612,4 +614,15 @@ private fun String.filterSignedInt(): String {
     val trimmed = trim()
     val sign = if (trimmed.startsWith("-")) "-" else ""
     return sign + trimmed.filter(Char::isDigit)
+}
+
+// 吸水/扫描时间入库仍用毫秒，此处仅做展示层的秒<->毫秒换算
+private fun millisToSecondsDisplay(millis: String): String {
+    val parsed = millis.trim().toLongOrNull() ?: return "0"
+    return ((parsed + 500) / 1000).toString()
+}
+
+private fun secondsDisplayToMillis(seconds: String): String {
+    val parsed = seconds.trim().toLongOrNull() ?: return "0"
+    return (parsed * 1000).toString()
 }
