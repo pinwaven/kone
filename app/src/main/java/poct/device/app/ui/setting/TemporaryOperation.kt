@@ -56,8 +56,10 @@ import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.navigation.NavController
+import poct.device.app.App
 import poct.device.app.AppParams
 import poct.device.app.R
+import poct.device.app.component.AppConfirmPassword
 import poct.device.app.component.AppFilledButton
 import poct.device.app.component.AppOutlinedButton
 import poct.device.app.component.AppScaffold
@@ -66,6 +68,7 @@ import poct.device.app.component.AppTopBar
 import poct.device.app.component.NanoEnvironmentSelector
 import poct.device.app.component.wakeScreenOnTouch
 import poct.device.app.entity.service.TestModeConfigService
+import poct.device.app.utils.app.AppToastUtil
 import poct.device.app.theme.bgColor
 import poct.device.app.theme.borderColor
 import poct.device.app.theme.fontColor
@@ -98,6 +101,7 @@ fun TemporaryOperation(navController: NavController) {
             var editingField by remember { mutableStateOf<TestModeConfigField?>(null) }
             var editingOriginalValue by remember { mutableStateOf("") }
             var autoShowKeyboard by remember { mutableStateOf(true) }
+            var testModePasswordVisible by remember { mutableStateOf(false) }
             val coroutineScope = rememberCoroutineScope()
             fun testModeConfigValues() = TestModeConfigValues(
                 reactionTimeSeconds = reactionTimeSeconds,
@@ -200,8 +204,12 @@ fun TemporaryOperation(navController: NavController) {
                             uncheckedTrackColor = Color(0xFFBFC7D5),
                             uncheckedBorderColor = Color(0xFFBFC7D5)
                         ),
-                        onCheckedChange = {
-                            AppParams.runtimeModeState.setTestModeEnabled(it)
+                        onCheckedChange = { checked ->
+                            if (checked) {
+                                testModePasswordVisible = true
+                            } else {
+                                AppParams.runtimeModeState.setTestModeEnabled(false)
+                            }
                         }
                     )
                 }
@@ -338,6 +346,18 @@ fun TemporaryOperation(navController: NavController) {
 
                             null -> Unit
                         }
+                    }
+                }
+            )
+            AppConfirmPassword(
+                visible = testModePasswordVisible,
+                onCancel = { testModePasswordVisible = false },
+                onConfirm = { password ->
+                    if (AppParams.runtimeModeState.verifyTestModePassword(password)) {
+                        testModePasswordVisible = false
+                        AppParams.runtimeModeState.setTestModeEnabled(true)
+                    } else {
+                        AppToastUtil.shortShow(App.getContext().getString(R.string.msg_wrong_password))
                     }
                 }
             )

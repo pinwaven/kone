@@ -26,6 +26,10 @@ class RuntimeModeState(
         return nowMillis() - unlockedAt < FACTORY_TEST_UNLOCK_DURATION_MILLIS
     }
 
+    fun verifyTestModePassword(password: String): Boolean {
+        return password == TEST_MODE_PASSWORD
+    }
+
     fun setVenueModeEnabled(enabled: Boolean) {
         venueModeEnabled.value = enabled
         if (enabled) {
@@ -94,5 +98,6 @@ class RuntimeModeState(
     companion object {
         const val FACTORY_TEST_PASSWORD = "5988"
         const val FACTORY_TEST_UNLOCK_DURATION_MILLIS = 60 * 60 * 1000L
+        const val TEST_MODE_PASSWORD = "6988"
     }
 }
