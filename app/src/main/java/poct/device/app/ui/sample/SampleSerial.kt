@@ -3,6 +3,8 @@ package poct.device.app.ui.sample
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +20,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,11 +35,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -77,14 +88,16 @@ import poct.device.app.chart.rememberTestModePointChartStyle
 import poct.device.app.component.AppFilledButton
 import poct.device.app.component.AppPreviewWrapper
 import poct.device.app.component.AppScaffold
-import poct.device.app.component.AppTextField
 import poct.device.app.component.wakeScreenOnTouch
 import poct.device.app.entity.CasePoint
+import poct.device.app.entity.service.LaserConfigService
 import poct.device.app.serial.v2.ctl.CtlCommandsV2
 import poct.device.app.serial.v2.ctl.CtlConstantsV2
 import poct.device.app.serial.v2.ctl.WaitResult
+import poct.device.app.theme.borderColor
 import poct.device.app.theme.filledFontColor
 import poct.device.app.theme.fontColor
+import poct.device.app.theme.inputBgColor
 import poct.device.app.theme.inputFontColor
 import poct.device.app.thirdparty.NanoApi
 import poct.device.app.thirdparty.model.nano.NanoAuthSupport
@@ -120,7 +133,9 @@ fun SampleSerial(
     val oneKeyUploadState by viewModel.oneKeyUploadState.collectAsState()
     val screwTestRunning by viewModel.screwTestRunning.collectAsState()
     val screwTestMessage by viewModel.screwTestMessage.collectAsState()
+    var laserMenuVisible by remember { mutableStateOf(false) }
     var laserDialogVisible by remember { mutableStateOf(false) }
+    var laserPowerSettingVisible by remember { mutableStateOf(false) }
     var screwDialogVisible by remember { mutableStateOf(false) }
     var oneKeyDialogVisible by remember { mutableStateOf(false) }
     AppScaffold(
@@ -185,9 +200,9 @@ fun SampleSerial(
                         onClick = { screwDialogVisible = true }
                     )
                     FactoryTestButton(
-                        text = "激光测试",
+                        text = "激光调试",
                         containerColor = specialTestButtonColor,
-                        onClick = { laserDialogVisible = true }
+                        onClick = { laserMenuVisible = true }
                     )
                     FactoryTestButton(
                         text = "退出应用",
@@ -243,6 +258,20 @@ fun SampleSerial(
             }
         }
     }
+    LaserMenuDialog(
+        visible = laserMenuVisible,
+        onLaserTest = {
+            laserMenuVisible = false
+            viewModel.resetLaserTestPower()
+            laserDialogVisible = true
+        },
+        onSetLaserPower = {
+            laserMenuVisible = false
+            viewModel.loadLaserPowerForSetting()
+            laserPowerSettingVisible = true
+        },
+        onDismiss = { laserMenuVisible = false }
+    )
     LaserTestDialog(
         visible = laserDialogVisible,
         power = laserPower,
@@ -253,6 +282,13 @@ fun SampleSerial(
             laserDialogVisible = false
             viewModel.closeLaser()
         }
+    )
+    SetLaserPowerDialog(
+        visible = laserPowerSettingVisible,
+        power = laserPower,
+        onPowerChange = { viewModel.updateLaserPower(it) },
+        onConfirm = { viewModel.setLaserPower() },
+        onDismiss = { laserPowerSettingVisible = false }
     )
     ScrewTestDialog(
         visible = screwDialogVisible,
@@ -318,6 +354,197 @@ private fun FactoryTestButton(
 }
 
 @Composable
+private fun LaserPowerInput(
+    modifier: Modifier = Modifier,
+    power: String,
+    onPowerChange: (String) -> Unit,
+) {
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    var textFieldValue by remember {
+        mutableStateOf(TextFieldValue(text = power, selection = TextRange(power.length)))
+    }
+    LaunchedEffect(power) {
+        if (textFieldValue.text != power) {
+            textFieldValue = TextFieldValue(text = power, selection = TextRange(power.length))
+        }
+    }
+    LaunchedEffect(Unit) {
+        delay(100)
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
+    BasicTextField(
+        value = textFieldValue,
+        modifier = modifier
+            .focusRequester(focusRequester)
+            .background(inputBgColor)
+            .border(width = 1.dp, color = borderColor, shape = RoundedCornerShape(4.dp))
+            .padding(horizontal = 12.dp),
+        singleLine = true,
+        textStyle = TextStyle(fontSize = 14.sp, color = inputFontColor),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        onValueChange = { incoming ->
+            textFieldValue = incoming
+            onPowerChange(incoming.text)
+        },
+        decorationBox = { innerTextField ->
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                if (textFieldValue.text.isEmpty()) {
+                    Text(
+                        text = "激光强度",
+                        color = poct.device.app.theme.placeHolderColor,
+                        style = TextStyle(fontSize = 14.sp, color = inputFontColor)
+                    )
+                }
+                innerTextField()
+            }
+        }
+    )
+}
+
+@Composable
+private fun DialogCloseIcon(onClose: () -> Unit, modifier: Modifier = Modifier) {
+    Icon(
+        modifier = modifier
+            .padding(top = 10.dp, end = 10.dp)
+            .size(20.dp)
+            .clickable { onClose() },
+        painter = painterResource(id = R.mipmap.pop_icon_guanbi),
+        contentDescription = ""
+    )
+}
+
+@Composable
+private fun LaserMenuDialog(
+    visible: Boolean,
+    onLaserTest: () -> Unit,
+    onSetLaserPower: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (!visible) {
+        return
+    }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnClickOutside = true)
+    ) {
+        Surface(
+            modifier = Modifier
+                .wakeScreenOnTouch()
+                .width(260.dp)
+                .height(160.dp),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(start = 15.dp, end = 15.dp, top = 24.dp, bottom = 20.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = fontColor,
+                        text = "激光调试"
+                    )
+                    FactoryTestButton(
+                        text = "激光测试",
+                        onClick = onLaserTest
+                    )
+                    FactoryTestButton(
+                        text = "设置激光强度",
+                        onClick = onSetLaserPower
+                    )
+                }
+                DialogCloseIcon(
+                    onClose = onDismiss,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SetLaserPowerDialog(
+    visible: Boolean,
+    power: String,
+    onPowerChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (!visible) {
+        return
+    }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnClickOutside = true)
+    ) {
+        Surface(
+            modifier = Modifier
+                .wakeScreenOnTouch()
+                .width(300.dp)
+                .height(220.dp),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(start = 15.dp, end = 15.dp, top = 24.dp, bottom = 20.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = fontColor,
+                        text = "设置激光强度"
+                    )
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        fontSize = 13.sp,
+                        color = fontColor,
+                        text = "激光强度（-100 到 0）"
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(36.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        LaserPowerInput(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(36.dp),
+                            power = power,
+                            onPowerChange = onPowerChange
+                        )
+                    }
+                    FactoryTestButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = "设置",
+                        onClick = onConfirm
+                    )
+                }
+                DialogCloseIcon(
+                    onClose = onDismiss,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun LaserTestDialog(
     visible: Boolean,
     power: String,
@@ -340,57 +567,62 @@ private fun LaserTestDialog(
                 .height(220.dp),
             shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(start = 15.dp, end = 15.dp, top = 24.dp, bottom = 20.dp),
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = fontColor,
-                    text = "激光测试"
-                )
-                Text(
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                    fontSize = 13.sp,
-                    color = fontColor,
-                    text = "激光强度（-100 到 0）"
-                )
-                Row(
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(36.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .fillMaxSize()
+                        .padding(start = 15.dp, end = 15.dp, top = 24.dp, bottom = 20.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    AppTextField(
-                        value = power,
-                        focusState = true,
-                        borderWidth = 1.dp,
-                        placeHolder = "激光强度",
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        onValueChange = onPowerChange
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = fontColor,
+                        text = "激光测试"
                     )
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        fontSize = 13.sp,
+                        color = fontColor,
+                        text = "激光强度（-100 到 0）"
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(36.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        LaserPowerInput(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(36.dp),
+                            power = power,
+                            onPowerChange = onPowerChange
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        FactoryTestButton(
+                            modifier = Modifier.width(120.dp),
+                            text = "打开",
+                            onClick = onOpen
+                        )
+                        FactoryTestButton(
+                            modifier = Modifier.width(120.dp),
+                            text = "关闭",
+                            onClick = onClose
+                        )
+                    }
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    FactoryTestButton(
-                        modifier = Modifier.width(120.dp),
-                        text = "打开",
-                        onClick = onOpen
-                    )
-                    FactoryTestButton(
-                        modifier = Modifier.width(120.dp),
-                        text = "关闭",
-                        onClick = onClose
-                    )
-                }
+                DialogCloseIcon(
+                    onClose = onDismiss,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                )
             }
         }
     }
@@ -423,58 +655,64 @@ private fun ScrewTestDialog(
                 .height(340.dp),
             shape = RoundedCornerShape(8.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(start = 24.dp, end = 24.dp, top = 22.dp, bottom = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = fontColor,
-                    text = "丝杆调试"
-                )
+            Box(modifier = Modifier.fillMaxSize()) {
                 Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    SmallScrewTestButton(text = "向上", onClick = onUp)
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        SmallScrewTestButton(text = "移出", onClick = onFront)
-                        SmallScrewTestButton(text = "复位", onClick = onReset)
-                        SmallScrewTestButton(text = "移入", onClick = onBack)
-                    }
-                    SmallScrewTestButton(text = "向下", onClick = onDown)
-                }
-                Text(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(20.dp),
-                    textAlign = TextAlign.Center,
-                    fontSize = 12.sp,
-                    color = inputFontColor,
-                    text = message.ifBlank { if (running) "执行中..." else "" }
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .fillMaxSize()
+                        .padding(start = 24.dp, end = 24.dp, top = 22.dp, bottom = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    FactoryTestButton(
-                        text = "往复5次",
-                        onClick = onCycle
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = fontColor,
+                        text = "丝杆调试"
                     )
-                    FactoryTestButton(
-                        text = "取消",
-                        onClick = onCancel
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        SmallScrewTestButton(text = "向上", onClick = onUp)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            SmallScrewTestButton(text = "移出", onClick = onFront)
+                            SmallScrewTestButton(text = "复位", onClick = onReset)
+                            SmallScrewTestButton(text = "移入", onClick = onBack)
+                        }
+                        SmallScrewTestButton(text = "向下", onClick = onDown)
+                    }
+                    Text(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(20.dp),
+                        textAlign = TextAlign.Center,
+                        fontSize = 12.sp,
+                        color = inputFontColor,
+                        text = message.ifBlank { if (running) "执行中..." else "" }
                     )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        FactoryTestButton(
+                            text = "往复5次",
+                            onClick = onCycle
+                        )
+                        FactoryTestButton(
+                            text = "取消",
+                            onClick = onCancel
+                        )
+                    }
                 }
+                DialogCloseIcon(
+                    onClose = onCancel,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                )
             }
         }
     }
@@ -885,6 +1123,9 @@ class SampleSerialViewModel : ViewModel() {
     val oneKeyQrCode = MutableStateFlow("")
     val oneKeyUploadState = MutableStateFlow<OneKeyUploadState>(OneKeyUploadState.Idle)
     val referenceValuesCache: MutableMap<String, String> = mutableMapOf()
+
+    // 一键测试实际下发给硬件的激光功率，上传曲线时一并放入 reference_values
+    private var oneKeyAppliedLaserPower: Int? = null
     val oneKeyChartModelProducer = ChartEntryModelProducer()
     val screwTestRunning = MutableStateFlow(false)
     val screwTestMessage = MutableStateFlow("")
@@ -929,6 +1170,28 @@ class SampleSerialViewModel : ViewModel() {
             }
             text.value = ("激光关闭 success: $result")
         }
+    }
+
+    fun setLaserPower() {
+        viewModelScope.launch {
+            val power = normalizedLaserPower()
+            laserPower.value = power.toString()
+            withContext(Dispatchers.IO) {
+                LaserConfigService.savePower(power.toString())
+            }
+            text.value = ("激光强度已保存: $power")
+        }
+    }
+
+    fun loadLaserPowerForSetting() {
+        viewModelScope.launch {
+            val stored = withContext(Dispatchers.IO) { LaserConfigService.findStoredPower() }
+            laserPower.value = (stored ?: SCAN_CARD_LD_PWR).toString()
+        }
+    }
+
+    fun resetLaserTestPower() {
+        laserPower.value = LASER_POWER_MIN.toString()
     }
 
     private fun normalizedLaserPower(): Int {
@@ -1088,8 +1351,9 @@ class SampleSerialViewModel : ViewModel() {
                         ("getLDPwr: $getLDPwr")
                 }
 
+                val scanPower = LaserConfigService.findStoredPower() ?: SCAN_CARD_LD_PWR
                 val setLDPwr =
-                    CtlCommandsV2.readAllData(CtlCommandsV2.setLDPwr(-10))
+                    CtlCommandsV2.readAllData(CtlCommandsV2.setLDPwr(scanPower))
 
                 withContext(Dispatchers.Main) {
                     text.value =
@@ -1398,7 +1662,8 @@ class SampleSerialViewModel : ViewModel() {
         if (oneKeyUploadState.value is OneKeyUploadState.Loading) return
         oneKeyUploadState.value = OneKeyUploadState.Loading
         viewModelScope.launch {
-            val refValues = referenceValuesCache[qr] ?: "{}"
+            val refValues = oneKeyAppliedLaserPower?.let { "{\"laser_power\":$it}" }
+                ?: referenceValuesCache[qr] ?: "{}"
             val curveFile = java.io.File(App.getContext().externalCacheDir, "data.bin")
             val result = withContext(Dispatchers.IO) {
                 poct.device.app.thirdparty.NanoApi.uploadCurve(qr, refValues, curveFile)
@@ -1686,7 +1951,9 @@ class SampleSerialViewModel : ViewModel() {
         return withContext(Dispatchers.IO) {
             val getLDPwr = CtlCommandsV2.readAllData(CtlCommandsV2.getLDPwr())
             Timber.w("one key getLDPwr: $getLDPwr")
-            val setLDPwr = CtlCommandsV2.readAllData(CtlCommandsV2.setLDPwr(SCAN_LD_PWR))
+            val oneKeyPower = LaserConfigService.findStoredPower() ?: SCAN_LD_PWR
+            oneKeyAppliedLaserPower = oneKeyPower
+            val setLDPwr = CtlCommandsV2.readAllData(CtlCommandsV2.setLDPwr(oneKeyPower))
             Timber.w("one key setLDPwr: $setLDPwr")
             val scanResult = CtlCommandsV2.readAllData(CtlCommandsV2.scan(SCAN_VELOCITY, SCAN_DURATION_MS))
             var needReset = scanResult.contains(SCAN_ERROR_NEED_RESET)
@@ -1927,6 +2194,7 @@ private const val LASER_POWER_MIN = -100
 private const val LASER_POWER_MAX = 0
 
 private const val SCAN_LD_PWR = -25
+private const val SCAN_CARD_LD_PWR = -10
 private const val SCAN_VELOCITY = -16000
 private const val SCAN_DURATION_MS = 14000
 private const val MOTOR_VELOCITY = 88888

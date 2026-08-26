@@ -217,7 +217,8 @@ data class NanoChipConfig(
     val cStd: Double = 0.0,
     val cMin: Double = 0.0,
     val cMax: Double = 0.0,
-    val cutOff1: Double = 0.0,
+    // 激光功率的有效值含 0，用 null 区分"服务器未下发"与"服务器下发了 0"
+    val cutOff1: Double? = null,
     val cutOff2: Double = 0.0,
     val cutOff3: Double = 0.0,
     val cutOff4: Double = 0.0,

@@ -43,6 +43,7 @@ import poct.device.app.entity.CasePoint
 import poct.device.app.entity.CaseResult
 import poct.device.app.entity.User
 import poct.device.app.entity.service.CaseService
+import poct.device.app.entity.service.LaserConfigService
 import poct.device.app.entity.service.SysConfigService
 import poct.device.app.entity.service.TestModeConfigService
 import poct.device.app.event.AppPdfPrintEvent
@@ -154,6 +155,12 @@ class WorkMainViewModel : ViewModel() {
     // 试剂卡配置
     private var cardConfig: CardConfig? = null
 
+    // 服务器为当前试剂卡下发的激光功率（cutOff1）；null 表示服务器未下发，取值含 0
+    private var serverLaserPower: Int? = null
+
+    // 本次扫描实际下发给硬件的激光功率，上传曲线时一并放入 reference_values
+    private var appliedLaserPower: Int? = null
+
     // Nano flow: declared biomarker outputs for the scanned chip (from
     // /api/kino-chip). Drives test_data extraction at upload time.
     private var nanoBiomarkerKeys: List<String>? = null
@@ -231,6 +238,8 @@ class WorkMainViewModel : ViewModel() {
         continueSacn.value = true
         isChipRetryUsed = false
         isChipMovingIn.value = false
+        serverLaserPower = null
+        appliedLaserPower = null
     }
 
     fun onDataDetail(record: CaseBean, callback: () -> Unit = {}) {
@@ -820,7 +829,8 @@ class WorkMainViewModel : ViewModel() {
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
-            val result = runCatching { NanoApi.uploadCurve(qrCode, "{}", curveFile) }
+            val referenceValues = appliedLaserPower?.let { "{\"laser_power\":$it}" } ?: "{}"
+            val result = runCatching { NanoApi.uploadCurve(qrCode, referenceValues, curveFile) }
             result.fold(
                     onSuccess = {
                         Timber.w(
@@ -856,16 +866,26 @@ class WorkMainViewModel : ViewModel() {
                 viewModelScope.launch {
                     Timber.d("doScanTest")
 
-                    // 激光功率
+                    // 激光功率：服务器下发了 cutOff1 就用服务器的值，否则用本地存储的设置值
                     withContext(Dispatchers.IO) {
                         val getLDPwr = CtlCommandsV2.readAllData(CtlCommandsV2.getLDPwr())
                         Timber.w("getLDPwr: $getLDPwr")
 
+                        // 测试模式下 cardConfig.cutOff1 已被测试模式配置覆盖，直接使用；
+                        // 否则用服务器下发的 cutOff1（含 0 为有效值，null 表示服务器未下发才回退）
+                        val ldPower = if (isTestModeEnabled()) {
+                            cardConfig!!.cutOff1.toInt()
+                        } else {
+                            serverLaserPower
+                                ?: LaserConfigService.findStoredPower()
+                                ?: cardConfig!!.cutOff1.toInt()
+                        }
                         val setLDPwr =
                                 CtlCommandsV2.readAllData(
-                                        CtlCommandsV2.setLDPwr(cardConfig!!.cutOff1.toInt())
+                                        CtlCommandsV2.setLDPwr(ldPower)
                                 )
                         Timber.w("setLDPwr: $setLDPwr")
+                        appliedLaserPower = ldPower
                     }
 
                     checkStep.value = 50
@@ -2060,7 +2080,7 @@ class WorkMainViewModel : ViewModel() {
                     cStd = c.cStd,
                     cMin = c.cMin,
                     cMax = c.cMax,
-                    cutOff1 = c.cutOff1,
+                    cutOff1 = c.cutOff1 ?: 0.0,
                     cutOff2 = c.cutOff2,
                     cutOff3 = c.cutOff3,
                     cutOff4 = c.cutOff4,
@@ -2181,6 +2201,7 @@ class WorkMainViewModel : ViewModel() {
         nanoBiomarkerKeys = chipResp.biomarkerKeys
         nanoChipKeys.value = chipResp.biomarkerKeys
         nanoReport.value = null
+        serverLaserPower = nanoCardConfig.cutOff1?.toInt()
 
         onBeanUpdate(
                 bean.value.copy(

@@ -59,15 +59,24 @@ object NanoApi {
     // consume it directly without re-querying (used when upgrade is triggered from SysFunInfo).
     var pendingUpgrade: poct.device.app.thirdparty.model.nano.NanoUpgradeResp? = null
 
-    private val authClient: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(5, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
-            .writeTimeout(10, TimeUnit.SECONDS)
-            .retryOnConnectionFailure(true)
-            .build()
-    }
+    internal fun buildClient(
+        connectTimeoutSec: Long = 5,
+        readTimeoutSec: Long = 15,
+        writeTimeoutSec: Long = 10,
+    ): OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(connectTimeoutSec, TimeUnit.SECONDS)
+        .readTimeout(readTimeoutSec, TimeUnit.SECONDS)
+        .writeTimeout(writeTimeoutSec, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
+
+    private val authClient: OkHttpClient by lazy { buildClient() }
     private val JSON = "application/json".toMediaType()
+
+    // 曲线文件上传体积较大，用更长的读写超时
+    private val uploadCurveClient: OkHttpClient by lazy {
+        buildClient(readTimeoutSec = 30, writeTimeoutSec = 60)
+    }
 
     private fun baseUrl(): String = AppParams.runtimeModeState.nanoBaseUrl().trimEnd('/')
 
@@ -603,7 +612,7 @@ object NanoApi {
                 .withAuth(token)
                 .post(buildMultipart())
                 .build()
-            authClient.newCall(request).execute().use { resp ->
+            uploadCurveClient.newCall(request).execute().use { resp ->
                 return NanoRawResponse(status = resp.code, body = resp.body?.string().orEmpty())
             }
         }

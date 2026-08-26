@@ -113,6 +113,15 @@ class RuntimeModeStateTest {
     }
 
     @Test
+    fun verifyTestModePasswordOnlyAcceptsConfiguredPassword() {
+        val state = RuntimeModeState(nowMillis = { currentTime })
+
+        assertTrue(state.verifyTestModePassword("6988"))
+        assertFalse(state.verifyTestModePassword("5988"))
+        assertFalse(state.verifyTestModePassword(""))
+    }
+
+    @Test
     fun nanoEnvironmentCanBeSelectedDirectly() {
         val state = RuntimeModeState(nowMillis = { currentTime })
 
