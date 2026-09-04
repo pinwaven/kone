@@ -27,6 +27,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -55,6 +56,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import poct.device.app.component.BoardPowerGuardOverlay
 import poct.device.app.event.AppPdfPrintEvent
 import poct.device.app.event.AppScannerEvent
 import poct.device.app.event.AppWifiEvent
@@ -612,29 +614,32 @@ fun MainNavHost() {
         }
     }
 
-    NavHost(navController = navController, startDestination = RouteConfig.SINGLE) {
-        // single路由注册
-        singleNav(navController)
-        // home路由注册
-        homeNav(navController)
-        // setting路由注册
-        settingNav(navController)
-        // work路由注册
-        workNav(navController)
-        // 报表路由注册
-        reportNav(navController)
-        // 售后路由注册
-        afterSaleNav(navController)
-        // 系统功能路由注册
-        sysFunNav(navController)
-        // 检测配置路由注册
-        workConfigNav(navController)
-        // 系统配置路由注册
-        sysConfigNav(navController)
-        // 例子配置路由注册
-        sampleConfigNav(navController)
-        // 倒计时路由注册
-        countdownNav(navController)
+    Box(modifier = Modifier.fillMaxSize()) {
+        NavHost(navController = navController, startDestination = RouteConfig.SINGLE) {
+            // single路由注册
+            singleNav(navController)
+            // home路由注册
+            homeNav(navController)
+            // setting路由注册
+            settingNav(navController)
+            // work路由注册
+            workNav(navController)
+            // 报表路由注册
+            reportNav(navController)
+            // 售后路由注册
+            afterSaleNav(navController)
+            // 系统功能路由注册
+            sysFunNav(navController)
+            // 检测配置路由注册
+            workConfigNav(navController)
+            // 系统配置路由注册
+            sysConfigNav(navController)
+            // 例子配置路由注册
+            sampleConfigNav(navController)
+            // 倒计时路由注册
+            countdownNav(navController)
+        }
+        BoardPowerGuardOverlay(navController)
     }
 }
 
