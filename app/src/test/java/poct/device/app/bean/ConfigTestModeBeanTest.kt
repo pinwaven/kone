@@ -15,8 +15,8 @@ class ConfigTestModeBeanTest {
     fun testModeParametersUseExpectedDefaults() {
         val bean = ConfigTestModeBean()
 
-        assertEquals("3000", bean.absorbTimeMillis)
-        assertEquals("8000", bean.scanTimeMillis)
+        assertEquals("240000", bean.absorbTimeMillis)
+        assertEquals("14000", bean.scanTimeMillis)
         assertEquals("-25", bean.laserPower)
     }
 

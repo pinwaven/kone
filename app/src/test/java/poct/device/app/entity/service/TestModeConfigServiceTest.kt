@@ -49,30 +49,30 @@ class TestModeConfigServiceTest {
 
     @Test
     fun normalizeAbsorbTimeKeepsMillisecondsInsideRange() {
-        assertEquals("1500", TestModeConfigService.normalizeAbsorbTimeMillis("1500"))
-        assertEquals("100000", TestModeConfigService.normalizeAbsorbTimeMillis("100000"))
-        assertEquals("3000", TestModeConfigService.normalizeAbsorbTimeMillis("3000"))
+        assertEquals("0", TestModeConfigService.normalizeAbsorbTimeMillis("0"))
+        assertEquals("300000", TestModeConfigService.normalizeAbsorbTimeMillis("300000"))
+        assertEquals("240000", TestModeConfigService.normalizeAbsorbTimeMillis("240000"))
     }
 
     @Test
-    fun normalizeAbsorbTimeUsesDefaultOutsideRange() {
-        assertEquals("3000", TestModeConfigService.normalizeAbsorbTimeMillis("1499"))
-        assertEquals("3000", TestModeConfigService.normalizeAbsorbTimeMillis("100001"))
-        assertEquals("3000", TestModeConfigService.normalizeAbsorbTimeMillis("abc"))
+    fun normalizeAbsorbTimeClampsOutsideRangeAndDefaultsWhenInvalid() {
+        assertEquals("0", TestModeConfigService.normalizeAbsorbTimeMillis("-1"))
+        assertEquals("300000", TestModeConfigService.normalizeAbsorbTimeMillis("300001"))
+        assertEquals("240000", TestModeConfigService.normalizeAbsorbTimeMillis("abc"))
     }
 
     @Test
     fun normalizeScanTimeKeepsMillisecondsInsideRange() {
         assertEquals("1", TestModeConfigService.normalizeScanTimeMillis("1"))
-        assertEquals("60000", TestModeConfigService.normalizeScanTimeMillis("60000"))
-        assertEquals("8000", TestModeConfigService.normalizeScanTimeMillis("8000"))
+        assertEquals("300000", TestModeConfigService.normalizeScanTimeMillis("300000"))
+        assertEquals("14000", TestModeConfigService.normalizeScanTimeMillis("14000"))
     }
 
     @Test
-    fun normalizeScanTimeUsesDefaultOutsideRange() {
-        assertEquals("8000", TestModeConfigService.normalizeScanTimeMillis("0"))
-        assertEquals("8000", TestModeConfigService.normalizeScanTimeMillis("60001"))
-        assertEquals("8000", TestModeConfigService.normalizeScanTimeMillis("abc"))
+    fun normalizeScanTimeClampsOutsideRangeAndDefaultsWhenInvalid() {
+        assertEquals("1", TestModeConfigService.normalizeScanTimeMillis("0"))
+        assertEquals("300000", TestModeConfigService.normalizeScanTimeMillis("300001"))
+        assertEquals("14000", TestModeConfigService.normalizeScanTimeMillis("abc"))
     }
 
     @Test
@@ -83,9 +83,9 @@ class TestModeConfigServiceTest {
     }
 
     @Test
-    fun normalizeLaserPowerUsesDefaultOutsideRange() {
-        assertEquals("-25", TestModeConfigService.normalizeLaserPower("-101"))
-        assertEquals("-25", TestModeConfigService.normalizeLaserPower("1"))
+    fun normalizeLaserPowerClampsOutsideRangeAndDefaultsWhenInvalid() {
+        assertEquals("-100", TestModeConfigService.normalizeLaserPower("-101"))
+        assertEquals("0", TestModeConfigService.normalizeLaserPower("1"))
         assertEquals("-25", TestModeConfigService.normalizeLaserPower("abc"))
     }
 
