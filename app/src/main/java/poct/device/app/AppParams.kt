@@ -87,6 +87,17 @@ object AppParams {
     var resumeStatus = false
 
     /**
+     * 主板欠压重启保护：主流程因未确认主板可用而锁定
+     */
+    val boardPowerBlocked = MutableStateFlow(false)
+    val boardPowerAgingWarn = MutableStateFlow(false)
+
+    fun setBoardPowerBlocked(blocked: Boolean, agingWarn: Boolean) {
+        boardPowerBlocked.value = blocked
+        boardPowerAgingWarn.value = blocked && agingWarn
+    }
+
+    /**
      * Nano AI backend (Aliyun FC). Hardcoded — not user-configurable. The
      * operator only sets the per-device serial number in Settings.
      */

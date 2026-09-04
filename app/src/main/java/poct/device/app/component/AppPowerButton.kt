@@ -48,6 +48,7 @@ import poct.device.app.MyDeviceAdminReceiver
 import poct.device.app.R
 import poct.device.app.theme.filledFontColor
 import poct.device.app.theme.fontColor
+import poct.device.app.utils.app.BoardPowerGuard
 
 
 /**
@@ -241,6 +242,7 @@ class AppPowerButtonViewModel : ViewModel() {
         restartConfirm.value = false
         restartIng.value = true
         viewModelScope.launch(Dispatchers.IO) {
+            BoardPowerGuard.clearForIntentionalRestartBlocking()
             val dpm = getDevicePolicyManager(context)
             val adminComponent = getAdminComponent(context)
             dpm.reboot(adminComponent)

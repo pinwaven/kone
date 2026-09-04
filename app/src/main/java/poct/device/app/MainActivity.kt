@@ -58,7 +58,6 @@ import kotlinx.coroutines.launch
 import poct.device.app.event.AppPdfPrintEvent
 import poct.device.app.event.AppScannerEvent
 import poct.device.app.event.AppWifiEvent
-import poct.device.app.serial.v2.ctl.CtlCommandsV2
 import poct.device.app.utils.app.AppSystemUtils
 import poct.device.app.theme.AppFullScreenTheme
 import poct.device.app.theme.primaryColor
@@ -157,13 +156,8 @@ class MainActivity : ComponentActivity() {
                     if (ctlBoardPoweredOff) {
                         ctlBoardPoweredOff = false
                         AppParams.ctlBoardResetEvent.value = System.currentTimeMillis()
-                        lifecycleScope.launch(Dispatchers.IO) {
-                            Timber.w("screen on — powering on ctl board, reopening serial port")
-                            AppSystemUtils.powerOnCtlBoard()
-                            App.getContext().openSerialPort()
-                            // power 板上电后第一次请求可能会CRC报错，先poll一次
-                            CtlCommandsV2.readAllData(CtlCommandsV2.poll())
-                        }
+                        Timber.w("screen on — attempting board power on recovery")
+                        App.getContext().attemptBoardPowerOn(BoardPowerAttemptReason.SCREEN_ON_RECOVERY)
                     }
                 }
             }

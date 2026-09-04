@@ -5,10 +5,18 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import poct.device.app.App
 import poct.device.app.AppParams
+import poct.device.app.BoardPowerAttemptReason
 import poct.device.app.event.AppBatteryEvent
 import poct.device.app.utils.common.EventUtils
 import timber.log.Timber
+
+/**
+ * 原始电量快照，不经过 AppBatteryUtils 的平滑/锁定，供 BoardPowerGuard 使用。
+ * plugged 为 null 表示无法确认充电状态（ACTION_BATTERY_CHANGED 未携带 EXTRA_PLUGGED）。
+ */
+data class BatterySnapshot(val percent: Int, val plugged: Boolean?)
 
 class AppBatteryReceiverHelper {
     companion object {
@@ -34,7 +42,31 @@ class AppBatteryReceiverHelper {
                 }
             }
         }
+
+        /**
+         * 同步读取一次原始电量与充电状态，用于 BoardPowerGuard 的电量快照与阻断判断。
+         */
+        fun readRawBatteryOnce(context: Context): BatterySnapshot {
+            val batteryStatus = context.registerReceiver(
+                null,
+                IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+            )
+
+            val current = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val total = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+            val percent = if (current >= 0 && total > 0) current * 100 / total else -1
+
+            val plugged = if (batteryStatus == null || !batteryStatus.hasExtra(BatteryManager.EXTRA_PLUGGED)) {
+                null
+            } else {
+                batteryStatus.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
+            }
+
+            return BatterySnapshot(percent, plugged)
+        }
     }
+
+    private var lastPluggedState: Boolean? = null
 
     val batteryStateReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -62,6 +94,14 @@ class AppBatteryReceiverHelper {
 
             // 发送事件
             EventUtils.publishEvent(AppBatteryEvent(displayPercentInt, plugged))
+
+            // 充电器插入边沿触发：仅在主流程因 board power guard 被锁定时重试上电
+            val wasPlugged = lastPluggedState
+            lastPluggedState = plugged
+            if (wasPlugged == false && plugged && AppParams.boardPowerBlocked.value) {
+                Timber.w("charger plugged while board power blocked, retry board power on")
+                App.getContext().attemptBoardPowerOn(BoardPowerAttemptReason.CHARGER_PLUGGED)
+            }
         }
     }
 }

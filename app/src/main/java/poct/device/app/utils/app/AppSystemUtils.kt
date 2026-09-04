@@ -23,6 +23,7 @@ import java.time.LocalDateTime
 // 实际为V2
 object AppSystemUtils {
     fun restartApp() {
+        BoardPowerGuard.clearForIntentionalRestartBlocking()
         val intent = App.getContext().packageManager.getLaunchIntentForPackage(
             App.getContext().packageName
         )
@@ -51,6 +52,7 @@ object AppSystemUtils {
      * 关闭设备
      */
     fun shutdown() {
+        BoardPowerGuard.clearForIntentionalRestartBlocking()
         runCommand("reboot -p")
     }
 
@@ -59,6 +61,7 @@ object AppSystemUtils {
      * 重启设备
      */
     fun reboot() {
+        BoardPowerGuard.clearForIntentionalRestartBlocking()
         runCommand("reboot")
     }
 
