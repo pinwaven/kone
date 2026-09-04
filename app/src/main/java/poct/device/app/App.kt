@@ -91,7 +91,10 @@ class App : Application() {
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val boardPowerAttemptMutex = Mutex()
-    private var lastBoardPowerAttemptAt = 0L
+    // 初始为负的防抖窗口而非 0，避免设备开机极快、elapsedRealtime() 还很小时
+    // 第一次上电尝试被误判为在防抖窗口内而跳过
+    private var lastBoardPowerAttemptAt = -BoardPowerGuard.RETRY_DEBOUNCE_MS
+    private var boardPowerAttemptGeneration = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -110,7 +113,16 @@ class App : Application() {
 
         appScope.launch {
             val snapshot = AppBatteryReceiverHelper.readRawBatteryOnce(this@App)
-            val decision = BoardPowerGuard.decide(snapshot.percent, snapshot.plugged)
+            val decision = try {
+                BoardPowerGuard.decide(snapshot.percent, snapshot.plugged)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // decide() 读库失败：降级为放行上电，不因 guard 自身故障把设备锁死，
+                // 与 markPending() 写失败时的降级策略保持一致（见设计文档 7. 异常处理）
+                Timber.e(e, "board power guard decide() failed, fail open to ProceedNormal")
+                BoardPowerGuard.Decision.ProceedNormal
+            }
             when (decision) {
                 is BoardPowerGuard.Decision.BlockNeedCharger -> {
                     Timber.w(
@@ -146,13 +158,37 @@ class App : Application() {
         appScope.launch {
             boardPowerAttemptMutex.withLock {
                 val now = SystemClock.elapsedRealtime()
-                if (now - lastBoardPowerAttemptAt < BoardPowerGuard.RETRY_DEBOUNCE_MS) {
+                // 充电器插入是真实的物理用户操作，本身受硬件插拔速度限制，不会像
+                // 短时间内重复调用那样抖动；不对它做防抖，避免它被前一次失败尝试
+                // (比如握手失败) 刚好卡在 2 秒窗口内而被吞掉，导致用户插上充电器却
+                // 没有任何反应，只能等下一次触发（再插拔/亮屏）才能恢复
+                if (reason != BoardPowerAttemptReason.CHARGER_PLUGGED &&
+                    now - lastBoardPowerAttemptAt < BoardPowerGuard.RETRY_DEBOUNCE_MS
+                ) {
                     Timber.w("skip board power attempt: debounced, reason=%s", reason)
                     return@withLock
                 }
                 lastBoardPowerAttemptAt = now
 
                 val snapshot = AppBatteryReceiverHelper.readRawBatteryOnce(this@App)
+                // 已经处于锁定态且未插电时，不自动重试（比如屏幕熄灭超时断电后又唤醒）；
+                // 只有真正插上充电器或再次开机才应该触发重试，见设计文档 5.6 节
+                if (AppParams.boardPowerBlocked.value && snapshot.plugged != true) {
+                    Timber.w(
+                        "skip board power attempt while blocked and not charging: reason=%s battery=%s plugged=%s",
+                        reason,
+                        snapshot.percent,
+                        snapshot.plugged
+                    )
+                    return@withLock
+                }
+
+                // generation 必须在这之后才自增：上面两个 return@withLock 都是空跑
+                // （没有真正碰硬件），不能让它们使一个正在跑 10 秒稳定确认的、真正
+                // 成功的 attempt 被误判为"过期"而放弃 markConfirmedStable()
+                boardPowerAttemptGeneration += 1
+                val attemptGeneration = boardPowerAttemptGeneration
+
                 if (!BoardPowerGuard.markPending(snapshot.percent)) {
                     Timber.e("board power guard markPending failed, proceed without guard")
                 }
@@ -178,9 +214,20 @@ class App : Application() {
 
                 launch {
                     delay(BoardPowerGuard.STABLE_DELAY_MS)
-                    BoardPowerGuard.markConfirmedStable()
-                    AppParams.setBoardPowerBlocked(blocked = false, agingWarn = false)
-                    Timber.w("board power confirmed stable, reason=%s", reason)
+                    boardPowerAttemptMutex.withLock {
+                        if (attemptGeneration != boardPowerAttemptGeneration) {
+                            Timber.w(
+                                "skip stale board power stable confirmation: reason=%s generation=%s current=%s",
+                                reason,
+                                attemptGeneration,
+                                boardPowerAttemptGeneration
+                            )
+                        } else {
+                            BoardPowerGuard.markConfirmedStable()
+                            AppParams.setBoardPowerBlocked(blocked = false, agingWarn = false)
+                            Timber.w("board power confirmed stable, reason=%s", reason)
+                        }
+                    }
                 }
             }
         }
@@ -253,6 +300,7 @@ class App : Application() {
     }
 
     fun openSerialPort() {
+        serialHelper?.close()
         serialHelper = object : SerialHelperV2("/dev/ttyS1", 230400) {}
         serialHelper!!.stopBits = 1
         serialHelper!!.dataBits = 8

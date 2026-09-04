@@ -20,6 +20,21 @@ data class BatterySnapshot(val percent: Int, val plugged: Boolean?)
 
 class AppBatteryReceiverHelper {
     companion object {
+        /**
+         * 将 EXTRA_PLUGGED 的原始值映射为充电状态。未知/缺失的值一律返回 null，
+         * 而不是当作"未插电"或"已插电"，避免误判（此前 `!= 0` 的写法会把 extra
+         * 缺失时的默认值 -1 误判为"已插电"）。
+         */
+        private fun readPluggedState(pluggedExtra: Int): Boolean? {
+            return when (pluggedExtra) {
+                BatteryManager.BATTERY_PLUGGED_AC,
+                BatteryManager.BATTERY_PLUGGED_USB,
+                BatteryManager.BATTERY_PLUGGED_WIRELESS -> true
+                0 -> false
+                else -> null
+            }
+        }
+
         // 在应用启动时调用一次，立即同步电量
         fun initBatteryOnAppStart(context: Context) {
             val batteryStatus = context.registerReceiver(
@@ -55,12 +70,7 @@ class AppBatteryReceiverHelper {
             val current = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
             val total = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
             val percent = if (current >= 0 && total > 0) current * 100 / total else -1
-
-            val plugged = if (batteryStatus == null || !batteryStatus.hasExtra(BatteryManager.EXTRA_PLUGGED)) {
-                null
-            } else {
-                batteryStatus.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
-            }
+            val plugged = readPluggedState(batteryStatus?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) ?: -1)
 
             return BatterySnapshot(percent, plugged)
         }
@@ -72,7 +82,8 @@ class AppBatteryReceiverHelper {
         override fun onReceive(context: Context, intent: Intent) {
             val current = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
             val total = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-            val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) != 0
+            val pluggedState = readPluggedState(intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1))
+            val plugged = pluggedState == true
 
             if (current < 0 || total <= 0) return
 
@@ -97,7 +108,7 @@ class AppBatteryReceiverHelper {
 
             // 充电器插入边沿触发：仅在主流程因 board power guard 被锁定时重试上电
             val wasPlugged = lastPluggedState
-            lastPluggedState = plugged
+            lastPluggedState = pluggedState
             if (wasPlugged == false && plugged && AppParams.boardPowerBlocked.value) {
                 Timber.w("charger plugged while board power blocked, retry board power on")
                 App.getContext().attemptBoardPowerOn(BoardPowerAttemptReason.CHARGER_PLUGGED)
