@@ -23,7 +23,7 @@ object TestModePointChartData {
     private const val DEFAULT_MIN_PEAK_TROUGH_Y_DIFF = 50.0
 
     /** 噪声小波过滤：波幅低于最高波此比例的区域判为噪声丢弃。 */
-    private const val NOISE_WAVE_AMP_RATIO = 0.1
+    private const val NOISE_WAVE_AMP_RATIO = 0.15
 
     /** 波峰判定调参：近窗做局部最大检查，宽窗做左涨/右跌幅度检查（慢波在近窗内跌幅不足） */
     private object PeakDetect {
@@ -32,6 +32,15 @@ object TestModePointChartData {
 
         /** 宽窗内左涨、右跌都要超过此幅度（与 minPeakTroughYDiff 取小） */
         const val MIN_RISE_DROP_Y = 20.0
+
+        /**
+         * isWideFlatTopOnset 判定"近峰容差带"宽度是否超出 isPeak 覆盖能力的门槛。理论上 isPeak
+         * 两侧窗口之和为 2×WIDE_WINDOW_X(=100)，但左右窗口各自独立锚定在同一触发点上，边界的取整/
+         * 闭区间效应会让实际覆盖上限略小于理论值（真机采样中宽度 99 的容差带已使 isPeak 两侧窗口
+         * 错开、无一点同时满足）。取 90 留出安全余量，确保 isWideFlatTopOnset 兜底时不会因卡在
+         * 理论边界而继续漏检。
+         */
+        const val WIDE_FLAT_TOP_BAND_MIN_X = 90.0
     }
 
     /** 波形左右边界搜索调参 */
@@ -306,20 +315,26 @@ object TestModePointChartData {
      * 的既有行为完全不变。
      */
     private fun isWideFlatTopOnset(points: List<CasePoint>, index: Int, minPeakTroughYDiff: Double): Boolean {
-        if (index == 0 || index >= points.lastIndex) return false
+        if (index < 2 || index >= points.lastIndex) return false
         val y = points[index].y
         val threshold = minOf(PeakDetect.MIN_RISE_DROP_Y, minPeakTroughYDiff)
 
-        // 平台前沿：上一点位于平台带之下（说明是刚升上来的前沿，只在此触发一次）
-        if (y - points[index - 1].y <= threshold) return false
+        // 平台前沿：捕捉"陡升→接近平顶"的过渡点——当前单步涨幅已回落到容差内，但上一步仍是陡升。
+        // 直接削顶（瞬间跳变到平顶）的波形里过渡点与跳变点重合，行为不变；缓升到削顶的 S 形波
+        // 陡升发生在远离顶部的中段，越靠近顶部单步涨幅越小，只有在此过渡点触发才能落在平顶附近，
+        // 否则后续以固定 y 展开的平顶宽度扫描会因触发点还远未到达平顶高度而立刻判定"窄平台"。
+        if (y - points[index - 1].y > threshold) return false
+        if (points[index - 1].y - points[index - 2].y <= threshold) return false
 
         // 向右量取平顶平台的宽度（带内视为同一平台）
         var runEnd = index
         while (runEnd < points.lastIndex && abs(points[runEnd + 1].y - y) <= threshold) {
             runEnd++
         }
-        // 窄平台由 isPeak 处理，避免与其重复触发
-        if (points[runEnd].x - points[index].x <= 2 * PeakDetect.WIDE_WINDOW_X) return false
+        // 窄平台由 isPeak 处理，避免与其重复触发。用略小于 2×WIDE_WINDOW_X 的门槛（WIDE_FLAT_TOP_BAND_MIN_X）
+        // 而非理论上限本身：isPeak 左右两侧窗口各自独立锚定同一点，边界取整效应使其实际覆盖上限略小于
+        // 理论值，卡在理论上限判"窄"会让贴着边界的平顶继续漏检。
+        if (points[runEnd].x - points[index].x <= PeakDetect.WIDE_FLAT_TOP_BAND_MIN_X) return false
 
         // 平台之后右侧必须跌落到平台带之下
         var afterPlateau = runEnd

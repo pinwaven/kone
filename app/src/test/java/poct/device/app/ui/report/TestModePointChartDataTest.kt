@@ -338,37 +338,40 @@ class TestModePointChartDataTest {
 
     @Test
     fun findSlopeRegionsBacksUpToRiseStartWhenClampedBoundaryIsMidRise() {
-        // startIndex x=0, maxEndX=320.
-        // After peak (x=80), flat tail descends to local min at x=200 (y=5),
-        // then gently rises through boundary (slope≈0.0125 per unit, <=0.2 so findMinInFlatTail
-        // does not break there), then descends beyond boundary to deeper min at x=440 (y=2).
-        // findMinInFlatTail returns index 12 (x=440 > 320) → clamping triggers.
-        // Clamped boundary at x=320 is mid-rise → endIndex should back up to x=200 (local min).
+        // startIndex x=0, maxEndX=500 (BoundarySearch.MAX_REGION_X). Same shape as a
+        // maxEndX=320 scenario, scaled ×1.5625 on x, y, and minPeakTroughYDiff together —
+        // slope (dy/dx) and every ratio-based threshold are scale-invariant, so behavior
+        // reproduces exactly at the new boundary.
+        // After peak (x=125), flat tail descends to local min at x=312.5 (y≈7.81),
+        // then gently rises through boundary (slope unchanged ≈0.0125 per unit, still <=0.2
+        // so the tail scan does not break there), then descends beyond boundary to a deeper
+        // min. That deeper min is beyond maxEndX=500 → clamping triggers.
+        // Clamped boundary at x=500 is mid-rise → endIndex should back up to x=312.5 (local min).
         val regions =
                 TestModePointChartData.findSlopeRegions(
                         listOf(
                                 CasePoint(0.0, 0.0),
-                                CasePoint(20.0, 5.0),
-                                CasePoint(60.0, 20.0),
-                                CasePoint(80.0, 30.0),  // peak (index 3)
-                                CasePoint(120.0, 15.0),
-                                CasePoint(160.0, 8.0),
-                                CasePoint(200.0, 5.0),  // local min — expected endIndex=6
-                                CasePoint(240.0, 5.5),  // gentle rise (slope 0.0125)
-                                CasePoint(280.0, 6.0),
-                                CasePoint(320.0, 6.5),  // boundary x=320, still rising
-                                CasePoint(360.0, 5.0),
-                                CasePoint(400.0, 3.0),
-                                CasePoint(440.0, 2.0),  // deeper min beyond boundary
-                                CasePoint(480.0, 2.5),
-                                CasePoint(500.0, 8.0),  // upswing — findMinInFlatTail breaks here
+                                CasePoint(31.25, 7.8125),
+                                CasePoint(93.75, 31.25),
+                                CasePoint(125.0, 46.875),  // peak (index 3)
+                                CasePoint(187.5, 23.4375),
+                                CasePoint(250.0, 12.5),
+                                CasePoint(312.5, 7.8125),  // local min — expected endIndex=6
+                                CasePoint(375.0, 8.59375),  // gentle rise (slope 0.0125)
+                                CasePoint(437.5, 9.375),
+                                CasePoint(500.0, 10.15625),  // boundary x=500, still rising
+                                CasePoint(562.5, 7.8125),
+                                CasePoint(625.0, 4.6875),
+                                CasePoint(687.5, 3.125),  // deeper min beyond boundary
+                                CasePoint(750.0, 3.90625),
+                                CasePoint(781.25, 12.5),  // upswing — tail scan breaks here
                         ),
-                        minPeakTroughYDiff = 5.0,
+                        minPeakTroughYDiff = 7.8125,
                 )
 
         assertEquals(1, regions.size)
         assertEquals(6, regions[0].endIndex)
-        assertEquals(200.0, regions[0].endPoint.x, 0.0)
+        assertEquals(312.5, regions[0].endPoint.x, 0.0)
     }
 
 
@@ -493,6 +496,9 @@ class TestModePointChartDataTest {
         // 真机采样：第 1 波是宽、圆顶的缓慢波(≈81~306)。触发点在上升沿时左边界能走到波脚，但
         // "以最终波峰重新回推左边界"从圆顶波峰起算时，顶部近乎平坦（净上升≈0）当场停住，把已正确
         // 的起点向右收窄到波形内部，得到过窄的 ≈137~273。修复后回推只允许向左延伸，不再收缩。
+        // 关闭噪声过滤：这条波波幅(593)相对本文件最高波(4544)只占13%，在
+        // NOISE_WAVE_AMP_RATIO=0.15 下会被噪声过滤丢弃——那是过滤器的既定行为，不是本用例要测的
+        // 边界收缩问题，用 filterNoiseWaves=false 把两件事解耦。
         val values =
                 requireNotNull(javaClass.classLoader?.getResourceAsStream("wave_broad_rounded_top.txt"))
                         .bufferedReader()
@@ -501,7 +507,7 @@ class TestModePointChartDataTest {
                         .map { it.trim().toDouble() }
         val points = values.mapIndexed { index, y -> CasePoint(index.toDouble(), y) }
 
-        val regions = TestModePointChartData.findSlopeRegions(points)
+        val regions = TestModePointChartData.findSlopeRegions(points, filterNoiseWaves = false)
 
         // 第 1 波（期望约 81~306，主峰 idx194）覆盖完整波形
         assertEquals(78, regions[0].startIndex)
@@ -822,4 +828,41 @@ class TestModePointChartDataTest {
         assertEquals(1282, regions[2].peakIndex)
     }
 
+    @Test
+    fun findSlopeRegionsDetectsGraduallyRisingClippedWaveWithNarrowIsPeakMargin() {
+        // 真机采样：第 2 波是缓升到削顶饱和的 S 形波（≈393~686，峰 idx488 起削顶）。峰值容差带
+        // （与峰值之差 ≤20 的区间，x≈487~586）宽度恰好卡在 isPeak 两侧 50 宽窗覆盖极限的边缘，
+        // 左右窗口在任何一点都无法同时满足，isPeak 全程为假；波形又是缓升进入平顶（非瞬间跳变），
+        // isWideFlatTopOnset 原先要求"当前单步涨幅超阈值"作为前沿判据，缓升沿的达阈点远离顶部
+        // （远处单步涨幅先超阈值，越靠近顶部单步涨幅反而变小），前沿触发点固定 y 展开的平顶宽度
+        // 扫描在远未到达平顶时就被判"窄"，整个第 2 波漏检（连同 noFilter 也测不到）。
+        val values =
+                requireNotNull(javaClass.classLoader?.getResourceAsStream("wave_missing_second.txt"))
+                        .bufferedReader()
+                        .readText()
+                        .split(',')
+                        .map { it.trim().toDouble() }
+        val points = values.mapIndexed { index, y -> CasePoint(index.toDouble(), y) }
+
+        val regions = TestModePointChartData.findSlopeRegions(points)
+
+        assertEquals(4, regions.size)
+        // 第 1 波
+        assertEquals(74, regions[0].startIndex)
+        assertEquals(350, regions[0].endIndex)
+        assertEquals(153, regions[0].peakIndex)
+        // 第 2 波（缓升削顶，曾漏检，期望约 393~686，峰 idx488）
+        assertEquals(393, regions[1].startIndex)
+        assertEquals(686, regions[1].endIndex)
+        assertEquals(488, regions[1].peakIndex)
+        assertEquals(8190.0, regions[1].peakPoint.y, 0.0)
+        // 第 3 波
+        assertEquals(1698, regions[2].startIndex)
+        assertEquals(1855, regions[2].endIndex)
+        assertEquals(1741, regions[2].peakIndex)
+        // 第 4 波
+        assertEquals(1862, regions[3].startIndex)
+        assertEquals(1980, regions[3].endIndex)
+        assertEquals(1887, regions[3].peakIndex)
+    }
 }
