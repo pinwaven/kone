@@ -306,7 +306,7 @@ Thin client interface for the Waven Nano AI backend (running on Aliyun FC 3.0). 
 
 #### 1) Worker Node Connectivity Probe (Ping)
 - **Method / Function:** `GET` / `probe()`
-- **Path:** `/api/kino-chip?chip_id=__ping__`
+- **Path:** `/kino/kino-chip?chip_id=__ping__`
 - **Description:** Hit by client to verify connectivity, latency, and Bearer Token validity.
 - **Request:**
   - Query parameter: `chip_id=__ping__`
@@ -320,7 +320,7 @@ Thin client interface for the Waven Nano AI backend (running on Aliyun FC 3.0). 
 
 #### 2) Get Reagent Chip Config Info
 - **Method / Function:** `GET` / `getChip(chipId: String)`
-- **Path:** `/api/kino-chip?chip_id={chipId}`
+- **Path:** `/kino/kino-chip?chip_id={chipId}`
 - **Description:** Pulls reagent chip physical channel scanning metadata, limits, validity, and patient bindings by card code.
 - **Request:**
   - Query parameter: `chip_id=BatchNumber-CardNumber` (URL encoded)
@@ -391,7 +391,7 @@ Thin client interface for the Waven Nano AI backend (running on Aliyun FC 3.0). 
 
 #### 3) Post Biomarker Data for AI Evaluation
 - **Method / Function:** `POST` / `postBiomarkers(req: NanoBiomarkersReq)`
-- **Path:** `/api/biomarkers`
+- **Path:** `/kino/biomarkers`
 - **Description:** Submit raw multi-channel scan signals to have AI model evaluate actual biomarker concentrations and compute biological age profiles.
 - **Request:**
   ```json
@@ -438,7 +438,7 @@ Thin client interface for the Waven Nano AI backend (running on Aliyun FC 3.0). 
 
 #### 4) Post Kino Diagnostic Result
 - **Method / Function:** `POST` / `postKinoResult(req: NanoKinoResultReq)`
-- **Path:** `/api/kino-result`
+- **Path:** `/kino/kino-result`
 - **Description:** Submits final test summary records to cloud for patient H5/PDF report generation.
 - **Request:**
   ```json
@@ -462,7 +462,7 @@ Thin client interface for the Waven Nano AI backend (running on Aliyun FC 3.0). 
 
 #### 5) Check for Software/Firmware Upgrade
 - **Method / Function:** `GET` / `checkUpgrade()`
-- **Path:** `/api/kino-upgrade`
+- **Path:** `/kino/kino-upgrade`
 - **Description:** Checks latest available client APK version and firmware URL.
 - **Request:**
   - None (identifies using authorization token in header)
@@ -473,3 +473,33 @@ Thin client interface for the Waven Nano AI backend (running on Aliyun FC 3.0). 
     "url": "https://poct-upgrade.virtualhealth.cn/apk/kone-0.3.5.apk"
   }
   ```
+
+#### 6) Set Device Laser Intensity
+- **Method / Function:** `POST` / `postDeviceConfig(laserIntensity: Int)`
+- **Path:** `/kino/device-config`
+- **Description:** Persists this device's calibrated laser power to the server (`kino_devices.device_config`, recursively merged so other future device-config keys aren't clobbered). Called from the "设置激光强度" factory-test dialog in `SampleSerial.kt`, alongside a local save to `LaserConfigService`. The server then applies the stored `laser_intensity` on top of the chip model's config for this device's future `Get Reagent Chip Config Info` responses — it overwrites `chip_config.cut_off1` (see endpoint #2), so a per-device laser calibration always takes effect on subsequent scans without needing a chip-model-level change.
+- **Request:**
+  ```json
+  {
+    "device_config": {
+      "laser_intensity": -25
+    }
+  }
+  ```
+- **Response (success):**
+  ```json
+  {
+    "success": true,
+    "device_config": {
+      "laser_intensity": -25
+    }
+  }
+  ```
+- **Response (failure):**
+  ```json
+  {
+    "success": false,
+    "error": "laser_intensity_must_be_a_number"
+  }
+  ```
+  Also returns `400 device_config_required` if the `device_config` object is missing, and `404 machine_not_found` if the authenticated machine record doesn't exist.

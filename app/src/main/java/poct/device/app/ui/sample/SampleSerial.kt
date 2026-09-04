@@ -28,10 +28,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +41,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.text.KeyboardOptions
@@ -53,6 +56,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -81,6 +88,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import poct.device.app.App
 import poct.device.app.AppParams
+import poct.device.app.MainActivity
 import poct.device.app.R
 import poct.device.app.RouteConfig
 import poct.device.app.chart.rememberMarker
@@ -133,11 +141,25 @@ fun SampleSerial(
     val oneKeyUploadState by viewModel.oneKeyUploadState.collectAsState()
     val screwTestRunning by viewModel.screwTestRunning.collectAsState()
     val screwTestMessage by viewModel.screwTestMessage.collectAsState()
+    val calibrationHsCrp by viewModel.calibrationHsCrp.collectAsState()
+    val calibrationSteps by viewModel.calibrationSteps.collectAsState()
+    val calibrationRunning by viewModel.calibrationRunning.collectAsState()
+    val calibrationAwaitingConfirm by viewModel.calibrationAwaitingConfirm.collectAsState()
+    val calibrationMessage by viewModel.calibrationMessage.collectAsState()
+    val calibrationQrCode by viewModel.calibrationQrCode.collectAsState()
+    val calibrationChartVisible by viewModel.calibrationChartVisible.collectAsState()
+    val calibrationSlopeRegions by viewModel.calibrationSlopeRegions.collectAsState()
+    val calibrationUploadState by viewModel.calibrationUploadState.collectAsState()
     var laserMenuVisible by remember { mutableStateOf(false) }
     var laserDialogVisible by remember { mutableStateOf(false) }
     var laserPowerSettingVisible by remember { mutableStateOf(false) }
     var screwDialogVisible by remember { mutableStateOf(false) }
     var oneKeyDialogVisible by remember { mutableStateOf(false) }
+    // 结果图弹窗会锁横屏再还原，Activity 未声明 orientation configChanges 会触发重建，
+    // 这几个可见性标记必须跨重建存活，否则关闭结果图后无法弹回 hsCRP 选择框
+    var calibrationSelectVisible by rememberSaveable { mutableStateOf(false) }
+    var calibrationCustomInputVisible by rememberSaveable { mutableStateOf(false) }
+    var calibrationScanDialogVisible by rememberSaveable { mutableStateOf(false) }
     AppScaffold(
     ) {
         Column {
@@ -238,7 +260,7 @@ fun SampleSerial(
                         containerColor = specialTestButtonColor,
                         onClick = { viewModel.poll() }
                     )
-                    FactoryTestButton(text = "吸水240秒", onClick = { viewModel.absorb() })
+//                    FactoryTestButton(text = "吸水240秒", onClick = { viewModel.absorb() })
                     FactoryTestButton(text = "扫描试剂卡", onClick = { viewModel.scanCard() })
                     FactoryTestButton(text = "扫描结果写入文件", onClick = { viewModel.readData() })
                     FactoryTestButton(
@@ -253,6 +275,11 @@ fun SampleSerial(
                             oneKeyDialogVisible = true
                             viewModel.startOneKeyTest()
                         }
+                    )
+                    FactoryTestButton(
+                        text = "校正扫描结果",
+                        containerColor = specialTestButtonColor,
+                        onClick = { calibrationSelectVisible = true }
                     )
                 }
             }
@@ -326,6 +353,59 @@ fun SampleSerial(
         uploadState = oneKeyUploadState,
         onUpload = { viewModel.uploadCurve() },
         onDismiss = { viewModel.dismissOneKeyChart() }
+    )
+    CalibrationSelectDialog(
+        visible = calibrationSelectVisible,
+        onSelect = { value ->
+            calibrationSelectVisible = false
+            calibrationScanDialogVisible = true
+            viewModel.startCalibrationScan(value)
+        },
+        onCustom = {
+            calibrationSelectVisible = false
+            calibrationCustomInputVisible = true
+        },
+        onDismiss = { calibrationSelectVisible = false }
+    )
+    CalibrationCustomInputDialog(
+        visible = calibrationCustomInputVisible,
+        onConfirm = { value ->
+            calibrationCustomInputVisible = false
+            calibrationSelectVisible = false
+            calibrationScanDialogVisible = true
+            viewModel.startCalibrationScan(value)
+        },
+        onDismiss = {
+            calibrationCustomInputVisible = false
+            calibrationSelectVisible = true
+        }
+    )
+    CalibrationScanDialog(
+        visible = calibrationScanDialogVisible && !calibrationChartVisible,
+        hsCrp = calibrationHsCrp,
+        steps = calibrationSteps,
+        running = calibrationRunning,
+        awaitingConfirm = calibrationAwaitingConfirm,
+        message = calibrationMessage,
+        qrCode = calibrationQrCode,
+        onConfirmChipInserted = { viewModel.confirmCalibrationChipInserted() },
+        onDismiss = {
+            calibrationScanDialogVisible = false
+            viewModel.cancelCalibrationScan()
+        }
+    )
+    CalibrationChartDialog(
+        visible = calibrationChartVisible,
+        slopeRegions = calibrationSlopeRegions,
+        chartModelProducer = viewModel.calibrationChartModelProducer,
+        qrCode = calibrationQrCode,
+        uploadState = calibrationUploadState,
+        onUpload = { viewModel.uploadCalibrationCurve() },
+        onDismiss = {
+            viewModel.dismissCalibrationChart()
+            calibrationScanDialogVisible = false
+            calibrationSelectVisible = true
+        }
     )
 }
 
@@ -825,6 +905,437 @@ private fun OneKeyTestDialog(
 }
 
 @Composable
+private fun CalibrationSelectDialog(
+    visible: Boolean,
+    onSelect: (Double) -> Unit,
+    onCustom: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (!visible) {
+        return
+    }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnClickOutside = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .wakeScreenOnTouch()
+                .width(420.dp)
+                .height(210.dp),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(start = 15.dp, end = 15.dp, top = 24.dp, bottom = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = fontColor,
+                        text = "选择 hsCRP 校正值"
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        listOf(0.0, 1.0, 3.0, 5.0).forEach { value ->
+                            CalibrationValueButton(
+                                modifier = Modifier.weight(1f),
+                                text = formatHsCrpForJson(value),
+                                onClick = { onSelect(value) }
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        listOf(10.0, 13.0, 20.0).forEach { value ->
+                            CalibrationValueButton(
+                                modifier = Modifier.weight(1f),
+                                text = formatHsCrpForJson(value),
+                                onClick = { onSelect(value) }
+                            )
+                        }
+                        CalibrationValueButton(
+                            modifier = Modifier.weight(1f),
+                            text = "自定义",
+                            containerColor = Color(0xFF92D8C8),
+                            onClick = onCustom
+                        )
+                    }
+                }
+                DialogCloseIcon(
+                    onClose = onDismiss,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalibrationValueButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    containerColor: Color = filledFontColor,
+) {
+    AppFilledButton(
+        modifier = modifier.height(40.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = containerColor,
+            contentColor = Color.White,
+        ),
+        textColor = Color.White,
+        fontSize = 14.sp,
+        text = text,
+        onClick = onClick,
+    )
+}
+
+@Composable
+private fun HsCrpDecimalInput(
+    modifier: Modifier = Modifier,
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    var textFieldValue by remember {
+        mutableStateOf(TextFieldValue(text = value, selection = TextRange(value.length)))
+    }
+    LaunchedEffect(value) {
+        if (textFieldValue.text != value) {
+            textFieldValue = TextFieldValue(text = value, selection = TextRange(value.length))
+        }
+    }
+    LaunchedEffect(Unit) {
+        delay(100)
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
+    BasicTextField(
+        value = textFieldValue,
+        modifier = modifier
+            .focusRequester(focusRequester)
+            .background(inputBgColor)
+            .border(width = 1.dp, color = borderColor, shape = RoundedCornerShape(4.dp))
+            .padding(horizontal = 12.dp),
+        singleLine = true,
+        textStyle = TextStyle(fontSize = 14.sp, color = inputFontColor),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        onValueChange = { incoming ->
+            val digits = incoming.text.filterDecimalInput()
+            textFieldValue = if (digits == incoming.text) {
+                incoming
+            } else {
+                TextFieldValue(text = digits, selection = TextRange(digits.length))
+            }
+            (AppParams.curActivity as? MainActivity)?.onUserTouch()
+            onValueChange(digits)
+        },
+        decorationBox = { innerTextField ->
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                if (textFieldValue.text.isEmpty()) {
+                    Text(
+                        text = "hsCRP",
+                        color = poct.device.app.theme.placeHolderColor,
+                        style = TextStyle(fontSize = 14.sp, color = inputFontColor)
+                    )
+                }
+                innerTextField()
+            }
+        }
+    )
+}
+
+@Composable
+private fun CalibrationCustomInputDialog(
+    visible: Boolean,
+    onConfirm: (Double) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (!visible) {
+        return
+    }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnClickOutside = false)
+    ) {
+        val view = LocalView.current
+        if (!view.isInEditMode) {
+            SideEffect {
+                val window = (view.parent as? DialogWindowProvider)?.window
+                window?.let {
+                    WindowCompat.setDecorFitsSystemWindows(it, false)
+                    WindowInsetsControllerCompat(it, view).apply {
+                        hide(WindowInsetsCompat.Type.navigationBars())
+                        systemBarsBehavior =
+                            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    }
+                }
+            }
+        }
+        var input by remember(visible) { mutableStateOf("") }
+        val parsed = input.toDoubleOrNull()
+        Surface(
+            modifier = Modifier
+                .wakeScreenOnTouch()
+                .width(300.dp)
+                .height(220.dp),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(start = 15.dp, end = 15.dp, top = 24.dp, bottom = 20.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = fontColor,
+                        text = "自定义 hsCRP"
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(36.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        HsCrpDecimalInput(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(36.dp),
+                            value = input,
+                            onValueChange = { input = it }
+                        )
+                    }
+                    FactoryTestButton(
+                        text = "确定",
+                        enabled = parsed != null,
+                        onClick = { parsed?.let(onConfirm) }
+                    )
+                }
+                DialogCloseIcon(
+                    onClose = onDismiss,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalibrationScanDialog(
+    visible: Boolean,
+    hsCrp: Double?,
+    steps: List<OneKeyTestStep>,
+    running: Boolean,
+    awaitingConfirm: Boolean,
+    message: String,
+    qrCode: String,
+    onConfirmChipInserted: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (!visible) {
+        return
+    }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnClickOutside = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .wakeScreenOnTouch()
+                .width(720.dp)
+                .height(520.dp),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = fontColor,
+                    text = "校正扫描结果"
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.width(210.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (hsCrp != null) {
+                            Text(
+                                modifier = Modifier.fillMaxWidth(),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = fontColor,
+                                text = "hsCRP: ${formatHsCrpForJson(hsCrp)}"
+                            )
+                        }
+                        steps.forEach { step ->
+                            OneKeyTestStepRow(step)
+                        }
+                        if (message.isNotBlank()) {
+                            Text(
+                                modifier = Modifier.fillMaxWidth(),
+                                fontSize = 12.sp,
+                                color = fontColor,
+                                text = message
+                            )
+                        }
+                        if (qrCode.isNotBlank()) {
+                            Text(
+                                modifier = Modifier.fillMaxWidth(),
+                                fontSize = 12.sp,
+                                color = fontColor,
+                                text = "二维码：$qrCode"
+                            )
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                        if (awaitingConfirm) {
+                            FactoryTestButton(
+                                modifier = Modifier.width(160.dp),
+                                text = "已插入，继续",
+                                onClick = onConfirmChipInserted
+                            )
+                        }
+                        FactoryTestButton(
+                            modifier = Modifier.width(160.dp),
+                            text = if (running) "终止/关闭" else "关闭",
+                            onClick = onDismiss
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalibrationChartDialog(
+    visible: Boolean,
+    slopeRegions: List<TestModeSlopeRegion>,
+    chartModelProducer: ChartEntryModelProducer,
+    qrCode: String,
+    uploadState: OneKeyUploadState,
+    onUpload: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (!visible) {
+        return
+    }
+    DisposableEffect(Unit) {
+        val previousOrientation =
+            AppParams.curActivity?.requestedOrientation ?: oneKeyChartDialogCloseOrientation()
+        AppParams.curActivity?.requestedOrientation = oneKeyChartDialogOpenOrientation()
+        onDispose {
+            AppParams.curActivity?.requestedOrientation = previousOrientation
+        }
+    }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties =
+            DialogProperties(
+                dismissOnClickOutside = true,
+                usePlatformDefaultWidth = oneKeyChartDialogUsePlatformDefaultWidth(),
+            )
+    ) {
+        Surface(
+            modifier = Modifier
+                .wakeScreenOnTouch()
+                .fillMaxSize(),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "校正扫描结果图",
+                        color = fontColor,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (qrCode.isNotBlank() && qrCode != CtlConstantsV2.CMD_ACTION_READ_QR_RESULT_NULL) {
+                            if (uploadState is OneKeyUploadState.Success) {
+                                Text(
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF2E7D32),
+                                    text = "上传成功",
+                                )
+                            } else {
+                                if (uploadState is OneKeyUploadState.Failure) {
+                                    Text(
+                                        fontSize = 11.sp,
+                                        color = Color(0xFFC62828),
+                                        text = uploadState.message,
+                                    )
+                                }
+                                FactoryTestButton(
+                                    modifier = Modifier.width(130.dp),
+                                    text = if (uploadState is OneKeyUploadState.Loading) "上传中..." else "上传检测结果",
+                                    onClick = onUpload,
+                                    enabled = uploadState !is OneKeyUploadState.Loading,
+                                )
+                            }
+                        }
+                        FactoryTestButton(
+                            modifier = Modifier.width(90.dp),
+                            text = "关闭",
+                            onClick = onDismiss
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFFF8F8F8), RoundedCornerShape(4.dp))
+                        .padding(10.dp)
+                ) {
+                    OneKeyTestResultChart(
+                        chartModelProducer = chartModelProducer,
+                        slopeRegions = slopeRegions
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun OneKeyChartDialog(
     visible: Boolean,
     slopeRegions: List<TestModeSlopeRegion>,
@@ -1139,6 +1650,27 @@ class SampleSerialViewModel : ViewModel() {
     // 单次一键测试内仅允许一次向内移动重试
     private var isOneKeyChipRetryUsed = false
 
+    // 校正扫描结果：完全独立于一键测试/快速扫描的状态，避免 hsCRP 相关中间状态污染其他扫描流程
+    val calibrationHsCrp = MutableStateFlow<Double?>(null)
+    val calibrationSteps = MutableStateFlow(defaultCalibrationSteps())
+    val calibrationRunning = MutableStateFlow(false)
+    val calibrationAwaitingConfirm = MutableStateFlow(false)
+    val calibrationMessage = MutableStateFlow("")
+    val calibrationQrCode = MutableStateFlow("")
+    val calibrationChartVisible = MutableStateFlow(false)
+    val calibrationSlopeRegions = MutableStateFlow<List<TestModeSlopeRegion>>(emptyList())
+    val calibrationUploadState = MutableStateFlow<OneKeyUploadState>(OneKeyUploadState.Idle)
+    val calibrationChartModelProducer = ChartEntryModelProducer()
+    private var calibrationJob: Job? = null
+    private var calibrationChipConfirmDeferred: CompletableDeferred<Unit>? = null
+    private var calibrationChipRetryUsed = false
+
+    // 校正扫描仅第一次需要完整片仓复位；后续每轮只需片仓弹出，加快连续校正扫描
+    private var calibrationHasResetOnce = false
+
+    // 本次校正扫描实际下发给硬件的激光功率，独立于 oneKeyAppliedLaserPower
+    private var calibrationAppliedLaserPower: Int? = null
+
     fun getDeviceId() {
         val sn: String = App.getDeviceId()
         text.value = ("获取SN success: $sn")
@@ -1179,7 +1711,14 @@ class SampleSerialViewModel : ViewModel() {
             withContext(Dispatchers.IO) {
                 LaserConfigService.savePower(power.toString())
             }
-            text.value = ("激光强度已保存: $power")
+            val uploaded = withContext(Dispatchers.IO) {
+                NanoApi.postDeviceConfig(power)
+            }
+            text.value = if (uploaded) {
+                "激光强度已保存: $power"
+            } else {
+                "激光强度已保存: $power（上传服务器失败，已存本地）"
+            }
         }
     }
 
@@ -1662,7 +2201,7 @@ class SampleSerialViewModel : ViewModel() {
         if (oneKeyUploadState.value is OneKeyUploadState.Loading) return
         oneKeyUploadState.value = OneKeyUploadState.Loading
         viewModelScope.launch {
-            val refValues = oneKeyAppliedLaserPower?.let { "{\"laser_power\":$it}" }
+            val refValues = oneKeyAppliedLaserPower?.let { "{\"laser_intensity\":$it}" }
                 ?: referenceValuesCache[qr] ?: "{}"
             val curveFile = java.io.File(App.getContext().externalCacheDir, "data.bin")
             val result = withContext(Dispatchers.IO) {
@@ -1688,6 +2227,265 @@ class SampleSerialViewModel : ViewModel() {
             viewModelScope.launch(Dispatchers.IO) {
                 CtlCommandsV2.readAllData(CtlCommandsV2.cancel())
             }
+        }
+    }
+
+    fun startCalibrationScan(hsCrp: Double) {
+        if (calibrationRunning.value || oneKeyTestRunning.value) {
+            text.value = "有测试正在执行，请稍后"
+            return
+        }
+        calibrationJob?.cancel()
+        calibrationChipConfirmDeferred = null
+        calibrationChipRetryUsed = false
+        calibrationHsCrp.value = hsCrp
+        calibrationSteps.value = defaultCalibrationSteps(firstStepIsReset = !calibrationHasResetOnce)
+        calibrationMessage.value = "开始校正扫描"
+        calibrationChartVisible.value = false
+        calibrationSlopeRegions.value = emptyList()
+        calibrationQrCode.value = ""
+        calibrationUploadState.value = OneKeyUploadState.Idle
+        calibrationRunning.value = true
+        calibrationAwaitingConfirm.value = false
+
+        calibrationJob =
+            viewModelScope.launch {
+                try {
+                    runCalibrationStep(0) {
+                        if (!calibrationHasResetOnce) {
+                            resetCaseForOneKey()
+                            calibrationHasResetOnce = true
+                        } else {
+                            ejectCaseForOneKeyChart()
+                        }
+                    }
+                    waitChipInsertedStepForCalibration()
+                    runCalibrationStep(2) { scanQrForCalibration() }
+                    runCalibrationStep(3) { moveInForOneKey() }
+                    runCalibrationStep(4) {
+                        val points = scanAndReadPointsForCalibration()
+                        val chartData = buildOneKeyChartData(points)
+                        calibrationSlopeRegions.value = chartData.slopeRegions
+                        calibrationChartModelProducer.setEntries(chartData.entrySets)
+                    }
+                    runCalibrationStep(5) {
+                        calibrationChartVisible.value = true
+                        calibrationMessage.value = "扫描结果图已显示，片仓弹出中..."
+                        ejectCaseForOneKeyChart()
+                    }
+                    calibrationMessage.value = "校正扫描完成"
+                    text.value = "校正扫描完成"
+                } catch (e: CancellationException) {
+                    calibrationMessage.value = "校正扫描已终止"
+                    text.value = "校正扫描已终止"
+                } catch (e: Exception) {
+                    val message = e.message ?: "未知错误"
+                    calibrationMessage.value = message
+                    text.value = "校正扫描失败: $message"
+                } finally {
+                    calibrationRunning.value = false
+                    calibrationAwaitingConfirm.value = false
+                    calibrationChipConfirmDeferred = null
+                }
+            }
+    }
+
+    fun confirmCalibrationChipInserted() {
+        viewModelScope.launch {
+            try {
+                ensureChipInDeviceForCalibration()
+                calibrationChipConfirmDeferred?.complete(Unit)
+            } catch (e: IOException) {
+                calibrationMessage.value = e.message ?: "检测设备内芯片失败"
+            }
+        }
+    }
+
+    fun dismissCalibrationChart() {
+        calibrationChartVisible.value = false
+        calibrationQrCode.value = ""
+        calibrationUploadState.value = OneKeyUploadState.Idle
+    }
+
+    fun uploadCalibrationCurve() {
+        val qr = calibrationQrCode.value
+        if (qr.isEmpty()) return
+        if (calibrationUploadState.value is OneKeyUploadState.Loading) return
+        calibrationUploadState.value = OneKeyUploadState.Loading
+        viewModelScope.launch {
+            val laserPart = calibrationAppliedLaserPower?.let { "\"laser_intensity\":$it" }
+            val hsCrpPart = calibrationHsCrp.value?.let { "\"hsCRP\":${formatHsCrpForJson(it)}" }
+            val refValues = "{" + listOfNotNull(laserPart, hsCrpPart).joinToString(",") + "}"
+            val curveFile = File(App.getContext().externalCacheDir, "data.bin")
+            val result = withContext(Dispatchers.IO) {
+                NanoApi.uploadCurve(qr, refValues, curveFile)
+            }
+            calibrationUploadState.value = if (result.ok) {
+                OneKeyUploadState.Success(result.id)
+            } else {
+                OneKeyUploadState.Failure(result.message.ifEmpty { result.error ?: "unknown error" })
+            }
+        }
+    }
+
+    fun cancelCalibrationScan() {
+        val wasRunning = calibrationRunning.value
+        calibrationChipConfirmDeferred?.cancel()
+        calibrationJob?.cancel()
+        calibrationAwaitingConfirm.value = false
+        calibrationRunning.value = false
+        calibrationQrCode.value = ""
+        calibrationUploadState.value = OneKeyUploadState.Idle
+        if (wasRunning) {
+            viewModelScope.launch(Dispatchers.IO) {
+                CtlCommandsV2.readAllData(CtlCommandsV2.cancel())
+            }
+        }
+    }
+
+    private suspend fun runCalibrationStep(index: Int, block: suspend () -> Unit) {
+        updateCalibrationStep(index, OneKeyStepStatus.Running)
+        calibrationMessage.value = "${calibrationSteps.value[index].label}中..."
+        try {
+            block()
+            updateCalibrationStep(index, OneKeyStepStatus.Success)
+        } catch (e: Exception) {
+            updateCalibrationStep(index, OneKeyStepStatus.Failure)
+            throw e
+        }
+    }
+
+    private fun updateCalibrationStep(index: Int, status: OneKeyStepStatus) {
+        calibrationSteps.value =
+            calibrationSteps.value.mapIndexed { curIndex, step ->
+                if (curIndex == index) {
+                    step.copy(status = status)
+                } else {
+                    step
+                }
+            }
+    }
+
+    private suspend fun waitChipInsertedStepForCalibration() {
+        val index = 1
+        updateCalibrationStep(index, OneKeyStepStatus.Waiting)
+        calibrationAwaitingConfirm.value = true
+        calibrationMessage.value = "请插入芯片后点击继续"
+        calibrationChipConfirmDeferred = CompletableDeferred()
+        try {
+            calibrationChipConfirmDeferred?.await()
+            updateCalibrationStep(index, OneKeyStepStatus.Success)
+            calibrationMessage.value = "已确认插入芯片"
+        } catch (e: Exception) {
+            updateCalibrationStep(index, OneKeyStepStatus.Failure)
+            throw e
+        } finally {
+            calibrationAwaitingConfirm.value = false
+            calibrationChipConfirmDeferred = null
+        }
+    }
+
+    private suspend fun scanQrForCalibration() {
+        withContext(Dispatchers.IO) {
+            CtlCommandsV2.readAllData(CtlCommandsV2.readQR())
+        }
+        val qrValue = withContext(Dispatchers.IO) {
+            CtlCommandsV2.waitReadQrResult()
+        }
+        calibrationQrCode.value = qrValue
+    }
+
+    /** 检测设备内芯片，未检测到时向内移动 2mm 重试一次（单次校正扫描内仅重试一次） */
+    private suspend fun ensureChipInDeviceForCalibration() {
+        withContext(Dispatchers.IO) {
+            if (detectChipForOneKey()) {
+                return@withContext
+            }
+            if (calibrationChipRetryUsed) {
+                throw IOException("设备中未检测到芯片，请先插入后重试")
+            }
+            calibrationChipRetryUsed = true
+
+            val moveDurationResult = CtlCommandsV2.readAllData(CtlCommandsV2.moveIn2mm())
+            Timber.w("calibration moveDurationResult: $moveDurationResult")
+            CtlCommandsV2.waitMoveDurationStatusSuccess()
+
+            if (!detectChipForOneKey()) {
+                throw IOException("设备中未检测到芯片，请先插入后重试")
+            }
+        }
+    }
+
+    private suspend fun scanAndReadPointsForCalibration(): List<CasePoint> {
+        return withContext(Dispatchers.IO) {
+            val getLDPwr = CtlCommandsV2.readAllData(CtlCommandsV2.getLDPwr())
+            Timber.w("calibration getLDPwr: $getLDPwr")
+            val calibrationPower = LaserConfigService.findStoredPower() ?: SCAN_LD_PWR
+            calibrationAppliedLaserPower = calibrationPower
+            val setLDPwr = CtlCommandsV2.readAllData(CtlCommandsV2.setLDPwr(calibrationPower))
+            Timber.w("calibration setLDPwr: $setLDPwr")
+            val scanResult = CtlCommandsV2.readAllData(CtlCommandsV2.scan(SCAN_VELOCITY, SCAN_DURATION_MS))
+            var needReset = scanResult.contains(SCAN_ERROR_NEED_RESET)
+            Timber.w("calibration scanResult: $scanResult needReset=$needReset")
+
+            waitPollForOneKey("扫描芯片", 40_000L) { result ->
+                if (result.contains(SCAN_ERROR_NEED_RESET)) needReset = true
+                result.contains(CtlConstantsV2.CMD_ACTION_SCAN_STATUS_COMPLETED)
+            }
+            if (needReset) {
+                val homingResult = CtlCommandsV2.readAllData(CtlCommandsV2.homing())
+                Timber.w("calibration homingResult: $homingResult")
+                waitPollForOneKey("片仓复位", 45_000L) { result ->
+                    CtlConstantsV2.HOMING_STATUS_MAP.any { (key, value) ->
+                        value >= CtlConstantsV2.CMD_ACTION_HOMING_STATUS_COMPLETED &&
+                                result.contains("s:$key")
+                    }
+                }
+                val moveToSsResult =
+                    CtlCommandsV2.readAllData(CtlCommandsV2.moveIn())
+                Timber.w("calibration moveInResult: $moveToSsResult")
+                waitPollForOneKey("片仓移入", 25_000L) {
+                    it.contains(CtlConstantsV2.CMD_ACTION_MOVE_TO_SS_STATUS_COMPLETED)
+                }
+
+                val rescannedResult = CtlCommandsV2.readAllData(CtlCommandsV2.scan(SCAN_VELOCITY, SCAN_DURATION_MS))
+                val rescannedNeedsReset = rescannedResult.contains(SCAN_ERROR_NEED_RESET)
+                Timber.w("calibration rescanResult: $rescannedResult needReset=$rescannedNeedsReset")
+                if (rescannedNeedsReset) {
+                    throw IOException("复位后扫描仍然报错: $rescannedResult")
+                }
+                waitPollForOneKey("扫描芯片(复位后)", 45_000L) {
+                    it.contains(CtlConstantsV2.CMD_ACTION_SCAN_STATUS_COMPLETED)
+                }
+            }
+
+            val queryResult = CtlCommandsV2.readAllDataByteArray(CtlCommandsV2.queryData())
+                ?: throw IOException("读取扫描bin失败")
+            if (queryResult.isEmpty()) {
+                throw IOException("读取扫描bin为空")
+            }
+
+            val file = File(App.getContext().externalCacheDir, "data.bin")
+            file.parentFile?.takeIf { !it.exists() }?.mkdirs()
+            if (file.exists()) {
+                file.delete()
+            }
+            FileOutputStream(file).use { outputStream -> outputStream.write(queryResult) }
+            Timber.w("calibration bin file: ${file.path}, size: ${queryResult.size}")
+
+            val scanData = AppCardUtils.parseData(queryResult)
+                ?: throw IOException("解析扫描bin失败")
+            Timber.w("calibration rawData size: ${scanData.rawData.size}")
+
+            val points = scanData.rawData.mapIndexed { index, value ->
+                CasePoint((index + 1).toDouble(), value.toDouble())
+            }
+            if (points.isEmpty()) {
+                throw IOException("扫描bin未解析出曲线点")
+            }
+            Timber.w("calibration chart points size: ${points.size}")
+            calibrationMessage.value = "扫描数据读取完成: ${points.size}点 ${file.path}"
+            points
         }
     }
 
@@ -2211,6 +3009,36 @@ internal fun defaultOneKeyTestSteps(): List<OneKeyTestStep> =
         OneKeyTestStep("扫描芯片"),
         OneKeyTestStep("显示扫描结果图"),
     )
+
+internal fun defaultCalibrationSteps(firstStepIsReset: Boolean = true): List<OneKeyTestStep> =
+    listOf(
+        OneKeyTestStep(if (firstStepIsReset) "片仓复位" else "片仓弹出"),
+        OneKeyTestStep("插入芯片"),
+        OneKeyTestStep("扫描二维码"),
+        OneKeyTestStep("片仓移入"),
+        OneKeyTestStep("扫描芯片"),
+        OneKeyTestStep("显示扫描结果图"),
+    )
+
+/** hsCRP 整数值不带小数点上传（5.0 -> "5"），小数值原样上传（2.5 -> "2.5"） */
+internal fun formatHsCrpForJson(value: Double): String {
+    return if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString()
+}
+
+/** 仅保留数字和至多一个小数点，用于 hsCRP 自定义输入 */
+internal fun String.filterDecimalInput(): String {
+    val sb = StringBuilder()
+    var dotSeen = false
+    for (c in this) {
+        if (c.isDigit()) {
+            sb.append(c)
+        } else if (c == '.' && !dotSeen) {
+            sb.append(c)
+            dotSeen = true
+        }
+    }
+    return sb.toString()
+}
 
 private fun String.toLaserPowerInput(): String {
     val filtered = buildString {

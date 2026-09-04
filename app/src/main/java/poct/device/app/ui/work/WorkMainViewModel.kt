@@ -829,12 +829,12 @@ class WorkMainViewModel : ViewModel() {
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
-            val referenceValues = appliedLaserPower?.let { "{\"laser_power\":$it}" } ?: "{}"
+            val referenceValues = appliedLaserPower?.let { "{\"laser_intensity\":$it}" } ?: "{}"
             val result = runCatching { NanoApi.uploadCurve(qrCode, referenceValues, curveFile) }
             result.fold(
                     onSuccess = {
                         Timber.w(
-                                "uploadCurve(work): ok=${it.ok} id=${it.id} status=${it.status} msg=${it.message}"
+                                "uploadCurve(work): ok=${it.ok} id=${it.id} status=${it.status} error=${it.error} msg=${it.message}"
                         )
                     },
                     onFailure = { Timber.w(it, "uploadCurve(work) failed (ignored)") },
