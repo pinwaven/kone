@@ -17,6 +17,7 @@ object NanoAuthStore {
         commToken: String,
         commTokenExpiresAt: String,
         machine: NanoMachine,
+        firmwareId: String = "",
     ): NanoAuthState {
         val state = NanoAuthState(
             rootToken = rootToken,
@@ -27,6 +28,7 @@ object NanoAuthStore {
             model = machine.model.orEmpty(),
             status = machine.status.orEmpty(),
             activatedAt = Instant.now().toString(),
+            firmwareId = firmwareId,
         )
         save(state)
         return state
@@ -34,6 +36,20 @@ object NanoAuthStore {
 
     suspend fun save(state: NanoAuthState) {
         SysConfigService.saveBean(ConfigNanoAuthBean.PREFIX, state.toBean())
+    }
+
+    /**
+     * Caches the MCU firmware id read from serial handshake so an auto reactivation
+     * (see [NanoProtectedCallExecutor]) can call `/activate` without a human present.
+     * Called on app boot, on manual activation, and whenever the device-info screen
+     * re-reads the handshake.
+     */
+    suspend fun updateFirmwareId(firmwareId: String) {
+        val trimmed = firmwareId.trim()
+        if (trimmed.isEmpty()) return
+        val current = load()
+        if (current.firmwareId == trimmed) return
+        save(current.copy(firmwareId = trimmed))
     }
 
     suspend fun invalidate(reason: String): NanoAuthState {
@@ -57,6 +73,7 @@ object NanoAuthStore {
             status = status,
             activatedAt = activatedAt,
             refreshedAt = refreshedAt,
+            firmwareId = firmwareId,
         )
 
     private fun NanoAuthState.toBean(): ConfigNanoAuthBean =
@@ -70,5 +87,6 @@ object NanoAuthStore {
             status = status,
             activatedAt = activatedAt,
             refreshedAt = refreshedAt,
+            firmwareId = firmwareId,
         )
 }

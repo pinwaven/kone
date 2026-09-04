@@ -16,6 +16,7 @@ import poct.device.app.serial.v2.ctl.CtlCommandsV2
 import poct.device.app.state.ActionState
 import poct.device.app.state.ViewState
 import poct.device.app.thirdparty.NanoApi
+import poct.device.app.thirdparty.NanoAuthStore
 import poct.device.app.thirdparty.model.nano.NanoAuthSupport
 import poct.device.app.thirdparty.SbEdgeFunc
 import poct.device.app.ui.sysconfig.SysConfigSysViewModel
@@ -116,8 +117,11 @@ class SysFunInfoViewModel : ViewModel() {
         }
     }
 
-    private fun readFirmwareVersion(): String {
+    private suspend fun readFirmwareVersion(): String {
         val hiResult = CtlCommandsV2.readAllData(CtlCommandsV2.hi())
+        // 查看设备信息时顺带刷新本地缓存的 firmware_id，跟启动时那份一样，
+        // 供 invalid_comm_token 自动重新 /activate 使用
+        NanoAuthStore.updateFirmwareId(NanoAuthSupport.extractFirmwareId(hiResult))
         return NanoAuthSupport.extractFirmwareVersion(hiResult)
     }
 

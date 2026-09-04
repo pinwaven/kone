@@ -5,6 +5,9 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonObject
 import com.google.gson.JsonParseException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.io.IOException
 import java.net.URLEncoder
 import java.time.Instant
 
@@ -27,6 +30,8 @@ object NanoEndpoints {
     fun tokenExchange(baseUrl: String): String = "${base(baseUrl)}/kino/token/exchange"
 
     fun kinoCurve(baseUrl: String): String = "${base(baseUrl)}/kino/kino-curve"
+
+    fun deviceConfig(baseUrl: String): String = "${base(baseUrl)}/kino/device-config"
 
     private fun base(baseUrl: String): String = baseUrl.trimEnd('/')
 }
@@ -65,9 +70,16 @@ data class NanoTokenExchangeResp(
     val error: String? = null,
 )
 
+object NanoTokenRecoveryGate {
+    private val mutex = Mutex()
+
+    suspend fun <T> withLock(block: suspend () -> T): T = mutex.withLock { block() }
+}
+
 class NanoProtectedCallExecutor(
     private val authStore: AuthStore,
     private val transport: Transport,
+    private val reactivator: Reactivator? = null,
     private val gson: Gson = GsonBuilder()
         .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
         .create(),
@@ -84,6 +96,15 @@ class NanoProtectedCallExecutor(
         ): NanoRawResponse
 
         suspend fun exchangeToken(rootToken: String): NanoRawResponse
+    }
+
+    /**
+     * Re-runs `/activate` with the locally cached mainboard/firmware id, no human
+     * involved. Used when the comm token itself is rejected (`invalid_comm_token`).
+     * Must persist the new auth state via [AuthStore.save] before returning true.
+     */
+    interface Reactivator {
+        suspend fun reactivate(state: NanoAuthState): Boolean
     }
 
     suspend fun execute(
@@ -106,16 +127,61 @@ class NanoProtectedCallExecutor(
         }
 
         val firstError = first.errorValue()
+        if (firstError == "invalid_comm_token") {
+            return recoverInvalidCommToken(
+                endpointName = endpointName,
+                request = request,
+                state = initialState,
+                staleCommToken = initialCommToken,
+                fallbackError = firstError,
+                fallbackStatus = first.status,
+            )
+        }
         if (firstError != "comm_token_expired") {
             invalidateAuthIfNeeded(initialState, firstError)
             return first.toFailure(endpointName, firstError)
         }
 
-        val rootToken = initialState.rootToken.trim()
+        return NanoTokenRecoveryGate.withLock {
+            val latestState = authStore.load()
+            val latestCommToken = latestState.commToken.trim()
+            if (latestCommToken.isNotEmpty() && latestCommToken != initialCommToken) {
+                val retryLatest = transport.executeProtected(request, latestCommToken)
+                if (retryLatest.isSuccessful()) {
+                    return@withLock NanoProtectedCallResult(ok = true, status = retryLatest.status, body = retryLatest.body)
+                }
+                val latestError = retryLatest.errorValue()
+                if (latestError == "invalid_comm_token") {
+                    return@withLock recoverInvalidCommTokenLocked(
+                        endpointName = endpointName,
+                        request = request,
+                        state = latestState,
+                        fallbackError = latestError,
+                        fallbackStatus = retryLatest.status,
+                    )
+                }
+                if (latestError != "comm_token_expired") {
+                    invalidateAuthIfNeeded(latestState, latestError)
+                    return@withLock retryLatest.toFailure(endpointName, latestError)
+                }
+            }
+
+            exchangeAndRetry(endpointName, request, latestState, first.status)
+        }
+    }
+
+    /** Refreshes commToken via the rootToken exchange and retries the original request once. */
+    private suspend fun exchangeAndRetry(
+        endpointName: String,
+        request: NanoProtectedRequest,
+        state: NanoAuthState,
+        fallbackStatus: Int?,
+    ): NanoProtectedCallResult {
+        val rootToken = state.rootToken.trim()
         if (rootToken.isEmpty()) {
             return NanoProtectedCallResult(
                 ok = false,
-                status = first.status,
+                status = fallbackStatus,
                 error = "missing_root_token",
                 message = "$endpointName failed: communication token expired and root token is missing",
             )
@@ -124,7 +190,7 @@ class NanoProtectedCallExecutor(
         val exchange = transport.exchangeToken(rootToken)
         if (!exchange.isSuccessful()) {
             val exchangeError = exchange.errorValue()
-            invalidateAuthIfNeeded(initialState, exchangeError)
+            invalidateAuthIfNeeded(state, exchangeError)
             return exchange.toFailure("token-exchange", exchangeError)
         }
 
@@ -137,7 +203,7 @@ class NanoProtectedCallExecutor(
             )
 
         if (!exchanged.success) {
-            invalidateAuthIfNeeded(initialState, exchanged.error)
+            invalidateAuthIfNeeded(state, exchanged.error)
             return NanoProtectedCallResult(
                 ok = false,
                 status = exchange.status,
@@ -157,15 +223,99 @@ class NanoProtectedCallExecutor(
             )
         }
 
-        val refreshedState = initialState.withExchange(exchanged, refreshedCommToken, refreshedExpiresAt)
+        val refreshedState = state.withExchange(exchanged, refreshedCommToken, refreshedExpiresAt)
         authStore.save(refreshedState)
 
-        val retry = transport.executeProtected(request, refreshedCommToken)
+        return retryWithRecoveredToken(endpointName, request, refreshedState, refreshedCommToken)
+    }
+
+    private suspend fun recoverInvalidCommToken(
+        endpointName: String,
+        request: NanoProtectedRequest,
+        state: NanoAuthState,
+        staleCommToken: String,
+        fallbackError: String,
+        fallbackStatus: Int?,
+    ): NanoProtectedCallResult =
+        NanoTokenRecoveryGate.withLock {
+            val latestState = authStore.load()
+            val latestCommToken = latestState.commToken.trim()
+            if (latestCommToken.isNotEmpty() && latestCommToken != staleCommToken) {
+                val retryLatest = transport.executeProtected(request, latestCommToken)
+                if (retryLatest.isSuccessful()) {
+                    return@withLock NanoProtectedCallResult(ok = true, status = retryLatest.status, body = retryLatest.body)
+                }
+                val latestError = retryLatest.errorValue()
+                // 与 execute() 里 comm_token_expired 分支对称：二次检查若发现改口成了
+                // comm_token_expired，接续 exchange 续期，而不是当普通失败直接返回。
+                if (latestError == "comm_token_expired") {
+                    return@withLock exchangeAndRetry(endpointName, request, latestState, retryLatest.status)
+                }
+                if (latestError != "invalid_comm_token") {
+                    invalidateAuthIfNeeded(latestState, latestError)
+                    return@withLock retryLatest.toFailure(endpointName, latestError)
+                }
+            }
+
+            recoverInvalidCommTokenLocked(
+                endpointName = endpointName,
+                request = request,
+                state = latestState.takeIf { it.commToken.isNotBlank() } ?: state,
+                fallbackError = fallbackError,
+                fallbackStatus = fallbackStatus,
+            )
+        }
+
+    private suspend fun recoverInvalidCommTokenLocked(
+        endpointName: String,
+        request: NanoProtectedRequest,
+        state: NanoAuthState,
+        fallbackError: String,
+        fallbackStatus: Int?,
+    ): NanoProtectedCallResult {
+        val reactivator = this.reactivator
+        if (reactivator == null || !reactivator.reactivate(state)) {
+            return NanoProtectedCallResult(
+                ok = false,
+                status = fallbackStatus,
+                error = fallbackError,
+                message = "$endpointName failed: $fallbackError, auto reactivation unavailable or failed",
+            )
+        }
+
+        val refreshedState = authStore.load()
+        val refreshedCommToken = refreshedState.commToken.trim()
+        if (refreshedCommToken.isEmpty()) {
+            return NanoProtectedCallResult(
+                ok = false,
+                error = "missing_comm_token",
+                message = "$endpointName failed: reactivation did not yield a communication token",
+            )
+        }
+
+        return retryWithRecoveredToken(endpointName, request, refreshedState, refreshedCommToken)
+    }
+
+    private suspend fun retryWithRecoveredToken(
+        endpointName: String,
+        request: NanoProtectedRequest,
+        state: NanoAuthState,
+        commToken: String,
+    ): NanoProtectedCallResult {
+        val retry = try {
+            transport.executeProtected(request, commToken)
+        } catch (e: IOException) {
+            return NanoProtectedCallResult(
+                ok = false,
+                error = "network_error",
+                message = "$endpointName failed after reactivation: ${e.message}",
+            )
+        }
         return if (retry.isSuccessful()) {
             NanoProtectedCallResult(ok = true, status = retry.status, body = retry.body)
         } else {
             val retryError = retry.errorValue()
-            invalidateAuthIfNeeded(refreshedState, retryError)
+            invalidateAuthIfNeeded(state, retryError)
             retry.toFailure(endpointName, retryError)
         }
     }

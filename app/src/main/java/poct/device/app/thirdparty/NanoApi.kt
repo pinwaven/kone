@@ -2,6 +2,7 @@ package poct.device.app.thirdparty
 
 import com.google.gson.JsonParseException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
@@ -25,6 +26,7 @@ import poct.device.app.thirdparty.model.nano.NanoBiomarkersReq
 import poct.device.app.thirdparty.model.nano.NanoBiomarkersResp
 import poct.device.app.thirdparty.model.nano.NanoChipResp
 import poct.device.app.thirdparty.model.nano.NanoDeviceInfoSupport
+import poct.device.app.thirdparty.model.nano.NanoDeviceConfigReq
 import poct.device.app.thirdparty.model.nano.NanoDeviceMeResp
 import poct.device.app.thirdparty.model.nano.NanoEndpoints
 import poct.device.app.thirdparty.model.nano.NanoKinoResultReq
@@ -36,8 +38,11 @@ import poct.device.app.thirdparty.model.nano.NanoProtectedCallResult
 import poct.device.app.thirdparty.model.nano.NanoProtectedCallExecutor
 import poct.device.app.thirdparty.model.nano.NanoProtectedRequest
 import poct.device.app.thirdparty.model.nano.NanoRawResponse
+import poct.device.app.thirdparty.model.nano.NanoTokenExchangeResp
+import poct.device.app.thirdparty.model.nano.NanoTokenRecoveryGate
 import timber.log.Timber
 import java.io.IOException
+import java.time.Instant
 import java.util.concurrent.TimeUnit
 import com.google.gson.JsonObject
 
@@ -82,6 +87,41 @@ object NanoApi {
 
     private fun activationToken(): String = AppParams.kinoActivationToken().trim()
 
+    // 网络层重试：解决"慢/偶发掉包"本身，减少真正需要人工介入的概率。
+    // 只重试连接异常和 5xx（服务端可能重启/过载），4xx 是业务错误，重试没意义。
+    private const val NETWORK_MAX_ATTEMPTS = 3
+    private const val NETWORK_INITIAL_BACKOFF_MS = 500L
+
+    private suspend fun executeWithBackoff(
+        maxAttempts: Int = NETWORK_MAX_ATTEMPTS,
+        initialBackoffMs: Long = NETWORK_INITIAL_BACKOFF_MS,
+        call: () -> NanoRawResponse,
+    ): NanoRawResponse {
+        var backoffMs = initialBackoffMs
+        var attempt = 1
+        while (true) {
+            val response = try {
+                call()
+            } catch (e: IOException) {
+                if (attempt >= maxAttempts) throw e
+                Timber.w(e, "NanoApi network attempt %d/%d failed, retrying in %dms", attempt, maxAttempts, backoffMs)
+                delay(backoffMs)
+                backoffMs *= 2
+                attempt++
+                continue
+            }
+            val isServerError = response.status in 500..599
+            if (isServerError && attempt < maxAttempts) {
+                Timber.w("NanoApi network attempt %d/%d got HTTP %d, retrying in %dms", attempt, maxAttempts, response.status, backoffMs)
+                delay(backoffMs)
+                backoffMs *= 2
+                attempt++
+                continue
+            }
+            return response
+        }
+    }
+
     private fun text(resId: Int, vararg args: Any): String =
         App.getContext().getString(resId, *args)
 
@@ -117,24 +157,47 @@ object NanoApi {
                     return executeNanoRequest(request, rootToken)
                 }
             },
+            reactivator = object : NanoProtectedCallExecutor.Reactivator {
+                override suspend fun reactivate(state: NanoAuthState): Boolean = autoReactivate()
+            },
             gson = App.gson,
         )
 
-    private fun executeNanoRequest(request: NanoProtectedRequest, token: String): NanoRawResponse {
-        val builder = Request.Builder()
-            .url(request.url)
-            .withAuth(token)
-        val okHttpRequest = when (request.method) {
-            "POST" -> builder.post(request.body.orEmpty().toRequestBody(JSON)).build()
-            else -> builder.get().build()
+    /**
+     * Re-activates with the mainboard/firmware id already cached on this device
+     * (see [NanoAuthStore.updateFirmwareId]) — no human input. `/activate` is
+     * idempotent and keyed off hardware ids only, so calling it again here is safe.
+     */
+    private suspend fun autoReactivate(): Boolean {
+        val mainboardId = App.getDeviceId().trim()
+        val firmwareId = NanoAuthStore.load().firmwareId.trim()
+        if (mainboardId.isEmpty() || firmwareId.isEmpty()) {
+            Timber.w("NanoApi auto reactivate skipped: missing mainboardId or firmwareId")
+            return false
         }
-        authClient.newCall(okHttpRequest).execute().use { response ->
-            return NanoRawResponse(
-                status = response.code,
-                body = response.body?.string().orEmpty(),
-            )
+        val result = activateDevice(mainboardId = mainboardId, firmwareId = firmwareId)
+        if (!result.ok) {
+            Timber.w("NanoApi auto reactivate failed: %s", result.message)
         }
+        return result.ok
     }
+
+    private suspend fun executeNanoRequest(request: NanoProtectedRequest, token: String): NanoRawResponse =
+        executeWithBackoff {
+            val builder = Request.Builder()
+                .url(request.url)
+                .withAuth(token)
+            val okHttpRequest = when (request.method) {
+                "POST" -> builder.post(request.body.orEmpty().toRequestBody(JSON)).build()
+                else -> builder.get().build()
+            }
+            authClient.newCall(okHttpRequest).execute().use { response ->
+                NanoRawResponse(
+                    status = response.code,
+                    body = response.body?.string().orEmpty(),
+                )
+            }
+        }
 
     private suspend fun executeProtected(
         endpointName: String,
@@ -219,75 +282,84 @@ object NanoApi {
 
         val url = "$base/kino/activate"
         try {
-            val jsonBody = App.gson.toJson(
-                NanoActivateReq(
-                    mainboardId = normalizedMainboardId,
-                    firmwareId = normalizedFirmwareId,
-                    model = normalizedModel,
+            // /activate 幂等、只按硬件ID查、不吃token，重试几次无副作用——这是让固件
+            // 在 invalid_comm_token 时自动兜底自调用的安全前提。
+            val response = executeWithBackoff {
+                val jsonBody = App.gson.toJson(
+                    NanoActivateReq(
+                        mainboardId = normalizedMainboardId,
+                        firmwareId = normalizedFirmwareId,
+                        model = normalizedModel,
+                    )
                 )
-            )
-            val request = Request.Builder()
-                .url(url)
-                .withAuth(token)
-                .post(jsonBody.toRequestBody(JSON))
-                .build()
-            authClient.newCall(request).execute().use { response ->
-                val body = response.body?.string().orEmpty()
-                val parsed = runCatching {
-                    App.gson.fromJson(body, NanoActivateResp::class.java)
-                }.getOrNull()
-                if (!response.isSuccessful) {
-                    val error = parsed?.error
-                    return@withContext ActivationResult(
-                        ok = false,
-                        status = response.code,
-                        error = error,
-                        message = text(R.string.nano_auth_activate_http_failed, response.code, errorText(error))
-                    )
+                val request = Request.Builder()
+                    .url(url)
+                    .withAuth(token)
+                    .post(jsonBody.toRequestBody(JSON))
+                    .build()
+                authClient.newCall(request).execute().use { resp ->
+                    NanoRawResponse(status = resp.code, body = resp.body?.string().orEmpty())
                 }
+            }
 
-                if (parsed == null) {
-                    return@withContext ActivationResult(
-                        ok = false,
-                        status = response.code,
-                        message = text(R.string.nano_auth_activate_parse_failed)
-                    )
-                }
-                if (!parsed.success) {
-                    return@withContext ActivationResult(
-                        ok = false,
-                        status = response.code,
-                        error = parsed.error,
-                        message = text(R.string.nano_auth_activate_failed, errorText(parsed.error))
-                    )
-                }
+            val parsed = runCatching {
+                App.gson.fromJson(response.body, NanoActivateResp::class.java)
+            }.getOrNull()
 
-                val rootToken = parsed.rootToken.orEmpty()
-                val commToken = parsed.commToken.orEmpty()
-                val expiresAt = parsed.commTokenExpiresAt.orEmpty()
-                val machine = parsed.machine
-                if (rootToken.isEmpty() || commToken.isEmpty() || expiresAt.isEmpty() || machine?.machineNo.isNullOrEmpty()) {
-                    return@withContext ActivationResult(
-                        ok = false,
-                        status = response.code,
-                        message = text(R.string.nano_auth_activate_missing_token_or_machine)
-                    )
-                }
-
-                val state = NanoAuthStore.saveActivation(
-                    rootToken = rootToken,
-                    commToken = commToken,
-                    commTokenExpiresAt = expiresAt,
-                    machine = machine!!,
-                )
-                uploadLocalMachineInfo(firmwareVersion = firmwareVersion)
-                ActivationResult(
-                    ok = true,
-                    status = response.code,
-                    authState = state,
-                    message = text(R.string.nano_auth_activate_success, state.machineNo)
+            if (response.status !in 200..299) {
+                val error = parsed?.error
+                return@withContext ActivationResult(
+                    ok = false,
+                    status = response.status,
+                    error = error,
+                    message = text(R.string.nano_auth_activate_http_failed, response.status, errorText(error))
                 )
             }
+
+            if (parsed == null) {
+                return@withContext ActivationResult(
+                    ok = false,
+                    status = response.status,
+                    message = text(R.string.nano_auth_activate_parse_failed)
+                )
+            }
+            if (!parsed.success) {
+                return@withContext ActivationResult(
+                    ok = false,
+                    status = response.status,
+                    error = parsed.error,
+                    message = text(R.string.nano_auth_activate_failed, errorText(parsed.error))
+                )
+            }
+
+            val rootToken = parsed.rootToken.orEmpty()
+            val commToken = parsed.commToken.orEmpty()
+            val expiresAt = parsed.commTokenExpiresAt.orEmpty()
+            val machine = parsed.machine
+            if (rootToken.isEmpty() || commToken.isEmpty() || expiresAt.isEmpty() || machine?.machineNo.isNullOrEmpty()) {
+                return@withContext ActivationResult(
+                    ok = false,
+                    status = response.status,
+                    message = text(R.string.nano_auth_activate_missing_token_or_machine)
+                )
+            }
+
+            // 先落盘 token 再做其它副作用（uploadLocalMachineInfo），避免"服务端已转正、
+            // 设备没存上"——即使后面这步失败，token 已经在本地，下次直接能用。
+            val state = NanoAuthStore.saveActivation(
+                rootToken = rootToken,
+                commToken = commToken,
+                commTokenExpiresAt = expiresAt,
+                machine = machine!!,
+                firmwareId = normalizedFirmwareId,
+            )
+            uploadLocalMachineInfo(firmwareVersion = firmwareVersion)
+            ActivationResult(
+                ok = true,
+                status = response.status,
+                authState = state,
+                message = text(R.string.nano_auth_activate_success, state.machineNo)
+            )
         } catch (e: IOException) {
             Timber.w(e, "NanoApi.activateDevice network failed")
             ActivationResult(
@@ -535,6 +607,28 @@ object NanoApi {
         }
     }
 
+    /**
+     * Uploads this device's calibrated laser intensity so the server can apply it on top of
+     * the chip model's config for future kino-chip responses (see nano's applyDeviceConfig,
+     * which writes laser_intensity into chip_config.cut_off1).
+     */
+    suspend fun postDeviceConfig(laserIntensity: Int): Boolean = withContext(Dispatchers.IO) {
+        val base = baseUrl()
+        if (base.isEmpty()) {
+            Timber.w("NanoApi.postDeviceConfig: nanoBaseUrl not configured")
+            return@withContext false
+        }
+        val url = NanoEndpoints.deviceConfig(base)
+        try {
+            val jsonBody = App.gson.toJson(NanoDeviceConfigReq(deviceConfig = mapOf("laser_intensity" to laserIntensity)))
+            val result = executeProtected("device-config", NanoProtectedRequest.post(url, jsonBody), base)
+            result.ok
+        } catch (e: Exception) {
+            Timber.w(e, "NanoApi.postDeviceConfig error: ${e::class.simpleName}")
+            false
+        }
+    }
+
     suspend fun postKinoResult(req: NanoKinoResultReq): NanoKinoResultResp? = withContext(Dispatchers.IO) {
         val base = baseUrl()
         if (base.isEmpty()) {
@@ -606,14 +700,22 @@ object NanoApi {
             .addFormDataPart("curve_file", curveFile.name, curveFile.asRequestBody("application/octet-stream".toMediaType()))
             .build()
 
-        fun execute(token: String): NanoRawResponse {
+        suspend fun execute(token: String): NanoRawResponse = executeWithBackoff {
             val request = Request.Builder()
                 .url(url)
                 .withAuth(token)
                 .post(buildMultipart())
                 .build()
             uploadCurveClient.newCall(request).execute().use { resp ->
-                return NanoRawResponse(status = resp.code, body = resp.body?.string().orEmpty())
+                val rawBody = resp.body?.string().orEmpty()
+                if (resp.code !in 200..299) {
+                    Timber.w(
+                        "NanoApi.uploadCurve non-2xx status=%d body=%s",
+                        resp.code,
+                        NanoAuthSupport.redactSensitiveText(rawBody)
+                    )
+                }
+                NanoRawResponse(status = resp.code, body = rawBody)
             }
         }
 
@@ -626,23 +728,144 @@ object NanoApi {
         }.getOrNull()
 
         try {
+            fun NanoRawResponse.toCurveUploadResult(): CurveUploadResult =
+                if (status in 200..299) {
+                    CurveUploadResult(ok = true, id = successId(), status = status)
+                } else {
+                    CurveUploadResult(ok = false, status = status, error = errorField(), message = "kino-curve failed: HTTP $status")
+                }
+
+            fun shouldInvalidateAuth(error: String?): Boolean =
+                error == "invalid_root_token" || error == "machine_not_active"
+
+            suspend fun exchangeWithRootTokenAndRetry(latestState: NanoAuthState): CurveUploadResult {
+                val rootToken = latestState.rootToken.trim()
+                if (rootToken.isEmpty()) {
+                    return CurveUploadResult(
+                        ok = false,
+                        status = 401,
+                        error = "missing_root_token",
+                        message = "comm_token_expired and root token missing, please activate",
+                    )
+                }
+
+                val exchangeResp = executeNanoRequest(
+                    NanoProtectedRequest.post(NanoEndpoints.tokenExchange(base), "{}"),
+                    rootToken,
+                )
+                if (exchangeResp.status !in 200..299) {
+                    val exchangeError = exchangeResp.errorField()
+                    if (shouldInvalidateAuth(exchangeError)) {
+                        NanoAuthStore.save(latestState.invalidated(exchangeError.orEmpty()))
+                    }
+                    return CurveUploadResult(
+                        ok = false,
+                        status = exchangeResp.status,
+                        error = exchangeError,
+                        message = "token exchange failed",
+                    )
+                }
+
+                val exchanged = runCatching {
+                    App.gson.fromJson(exchangeResp.body, NanoTokenExchangeResp::class.java)
+                }.getOrNull() ?: return CurveUploadResult(ok = false, message = "token exchange parse failed")
+
+                if (!exchanged.success) {
+                    if (shouldInvalidateAuth(exchanged.error)) {
+                        NanoAuthStore.save(latestState.invalidated(exchanged.error.orEmpty()))
+                    }
+                    return CurveUploadResult(
+                        ok = false,
+                        status = exchangeResp.status,
+                        error = exchanged.error,
+                        message = "token exchange failed: ${exchanged.error.orEmpty()}",
+                    )
+                }
+
+                commToken = exchanged.commToken.orEmpty().trim()
+                val commTokenExpiresAt = exchanged.commTokenExpiresAt.orEmpty().trim()
+                if (commToken.isEmpty() || commTokenExpiresAt.isEmpty()) {
+                    return CurveUploadResult(ok = false, error = "missing_comm_token", message = "token exchange returned empty token")
+                }
+
+                val machine = exchanged.machine
+                NanoAuthStore.save(
+                    latestState.copy(
+                        commToken = commToken,
+                        commTokenExpiresAt = commTokenExpiresAt,
+                        machineNo = machine?.machineNo ?: latestState.machineNo,
+                        machineName = machine?.machineName ?: latestState.machineName,
+                        model = machine?.model ?: latestState.model,
+                        status = machine?.status ?: latestState.status,
+                        refreshedAt = Instant.now().toString(),
+                    )
+                )
+
+                return execute(commToken).toCurveUploadResult()
+            }
+
+            suspend fun exchangeExpiredToken(): CurveUploadResult? {
+                val latestState = NanoAuthStore.load()
+                val latestCommToken = latestState.commToken.trim()
+                if (latestCommToken.isNotEmpty() && latestCommToken != commToken) {
+                    commToken = latestCommToken
+                    val retryLatest = execute(commToken)
+                    if (retryLatest.status in 200..299 || retryLatest.errorField() != "comm_token_expired") {
+                        return retryLatest.toCurveUploadResult()
+                    }
+                }
+
+                return exchangeWithRootTokenAndRetry(latestState)
+            }
+
+            suspend fun recoverInvalidToken(): CurveUploadResult? {
+                val latestState = NanoAuthStore.load()
+                val latestCommToken = latestState.commToken.trim()
+                if (latestCommToken.isNotEmpty() && latestCommToken != commToken) {
+                    commToken = latestCommToken
+                    val retryLatest = execute(commToken)
+                    if (retryLatest.status in 200..299) {
+                        return retryLatest.toCurveUploadResult()
+                    }
+                    val latestError = retryLatest.errorField()
+                    // 与 exchangeExpiredToken 对称：二次检查若发现改口成了 comm_token_expired，
+                    // 接续 exchange 续期，而不是当普通失败直接返回。
+                    if (latestError == "comm_token_expired") {
+                        return exchangeWithRootTokenAndRetry(latestState)
+                    }
+                    if (latestError != "invalid_comm_token") {
+                        return retryLatest.toCurveUploadResult()
+                    }
+                }
+
+                if (autoReactivate()) {
+                    commToken = NanoAuthStore.load().commToken.trim()
+                    if (commToken.isNotEmpty()) {
+                        return execute(commToken).toCurveUploadResult()
+                    }
+                    return CurveUploadResult(
+                        ok = false,
+                        error = "missing_comm_token",
+                        message = "reactivation did not yield a communication token",
+                    )
+                }
+
+                return null
+            }
+
             var resp = execute(commToken)
             if (resp.status == 401 && resp.errorField() == "comm_token_expired") {
-                val rootToken = authState.rootToken.trim()
-                if (rootToken.isEmpty()) return@withContext CurveUploadResult(ok = false, status = resp.status, message = "comm_token_expired and root token missing, please activate")
-                val exchangeResp = executeNanoRequest(NanoProtectedRequest.post(NanoEndpoints.tokenExchange(base), "{}"), rootToken)
-                if (exchangeResp.status !in 200..299) return@withContext CurveUploadResult(ok = false, status = exchangeResp.status, message = "token exchange failed")
-                val exchanged = runCatching { App.gson.fromJson(exchangeResp.body, poct.device.app.thirdparty.model.nano.NanoTokenExchangeResp::class.java) }.getOrNull()
-                    ?: return@withContext CurveUploadResult(ok = false, message = "token exchange parse failed")
-                commToken = exchanged.commToken.orEmpty().trim()
-                if (commToken.isEmpty()) return@withContext CurveUploadResult(ok = false, message = "token exchange returned empty token")
-                NanoAuthStore.save(authState.copy(commToken = commToken, commTokenExpiresAt = exchanged.commTokenExpiresAt.orEmpty()))
-                resp = execute(commToken)
+                NanoTokenRecoveryGate.withLock { exchangeExpiredToken() }?.let { return@withContext it }
+            }
+            // invalid_comm_token（非过期，而是被判无效）自动兜底：本地已有 mainboardId+firmwareId，
+            // 免打扰重新 /activate 一次再重试，重试仍失败才升级给人工。
+            if (resp.status == 401 && resp.errorField() == "invalid_comm_token") {
+                NanoTokenRecoveryGate.withLock { recoverInvalidToken() }?.let { return@withContext it }
             }
             if (resp.status in 200..299) {
                 CurveUploadResult(ok = true, id = resp.successId(), status = resp.status)
             } else if (resp.status == 401 && resp.errorField() == "invalid_comm_token") {
-                CurveUploadResult(ok = false, status = resp.status, error = resp.errorField(), message = "invalid_comm_token, please activate")
+                CurveUploadResult(ok = false, status = resp.status, error = resp.errorField(), message = "invalid_comm_token, auto reactivation failed, please check device network/backend")
             } else {
                 CurveUploadResult(ok = false, status = resp.status, error = resp.errorField(), message = "kino-curve failed: HTTP ${resp.status}")
             }

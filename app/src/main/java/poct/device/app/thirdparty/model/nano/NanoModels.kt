@@ -22,6 +22,10 @@ data class NanoKinoResultReq(
     val kinoDeviceId: String? = null,
 )
 
+data class NanoDeviceConfigReq(
+    val deviceConfig: Map<String, Int>,
+)
+
 data class NanoActivateReq(
     val mainboardId: String,
     val firmwareId: String,
@@ -74,6 +78,7 @@ data class NanoAuthState(
     val status: String = "",
     val activatedAt: String = "",
     val refreshedAt: String = "",
+    val firmwareId: String = "",
 ) {
     fun isActivated(): Boolean =
         rootToken.isNotBlank() && commToken.isNotBlank() && machineNo.isNotBlank()

@@ -17,6 +17,7 @@ import poct.device.app.entity.service.SysConfigService
 import poct.device.app.serial.v2.SerialHelperV2
 import poct.device.app.serial.v2.ctl.CtlCommandsV2
 import poct.device.app.thirdparty.NanoApi
+import poct.device.app.thirdparty.NanoAuthStore
 import poct.device.app.thirdparty.model.nano.NanoAuthSupport
 import poct.device.app.utils.app.AppLangUtils
 import poct.device.app.utils.app.AppSystemUtils
@@ -156,6 +157,7 @@ class App : Application() {
 
             val hiResult = CtlCommandsV2.readAllData(CtlCommandsV2.hi())
             val firmwareVersion = NanoAuthSupport.extractFirmwareVersion(hiResult)
+            val firmwareId = NanoAuthSupport.extractFirmwareId(hiResult)
 
             // 刷新本地缓存的固件版本
             if (firmwareVersion.isNotBlank()) {
@@ -166,6 +168,9 @@ class App : Application() {
                     configBean.copy(hardware = firmwareVersion)
                 )
             }
+            // 板上电后刷新本地缓存的 firmware_id，供后续 invalid_comm_token 自动
+            // 重新 /activate 时使用，不用等人工去工厂测试页手点激活
+            NanoAuthStore.updateFirmwareId(firmwareId)
 
             // 网络上报后台执行，不阻塞启动
             CoroutineScope(Dispatchers.IO).launch {
@@ -212,7 +217,21 @@ class App : Application() {
         Timber.w("serial port closed")
     }
 
+    // release 包无三方崩溃上报服务接入，仅把 warn 及以上日志转发到 logcat，
+    // 方便现场用 adb logcat 排查（verbose/debug/info 级别丢弃，避免过于嘈杂）
     private class CrashReportingTree : Timber.Tree() {
-        override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {}
+        override fun isLoggable(tag: String?, priority: Int): Boolean {
+            return priority >= android.util.Log.WARN
+        }
+
+        override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
+            if (!isLoggable(tag, priority)) {
+                return
+            }
+            android.util.Log.println(priority, tag ?: "App", message)
+            if (t != null) {
+                android.util.Log.println(priority, tag ?: "App", android.util.Log.getStackTraceString(t))
+            }
+        }
     }
 }

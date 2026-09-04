@@ -10,6 +10,7 @@ data class ConfigNanoAuthBean(
     var status: String = "",
     var activatedAt: String = "",
     var refreshedAt: String = "",
+    var firmwareId: String = "",
 ) : ConfigBean {
     companion object {
         const val PREFIX = "nano_auth_"
