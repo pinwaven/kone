@@ -25,7 +25,7 @@
     <string name="disconnect_wlan_confirm">是否断开当前网络？</string>
     <string name="msg_restart_confirm">重启设备？</string>
     <string name="msg_shutdown_confirm">关闭设备？</string>
-    <string name="msg_board_power_need_charger">电池电量低，请充电</string>
+    <string name="msg_board_power_need_charger">电池电量过低，无法完成检测，请充电</string>
     <string name="msg_board_power_aging_warn">电池老化，请联系客服更换电池</string>
     <string name="action_restart">重 启</string>
     <string name="action_shutdown">关 机</string>

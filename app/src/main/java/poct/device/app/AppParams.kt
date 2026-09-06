@@ -98,6 +98,16 @@ object AppParams {
     }
 
     /**
+     * 锁定提示弹窗可被用户关掉（不再强制常驻），但锁定状态本身不受影响。
+     * 用户尝试真正开始检测时调用本方法重新弹出提示，拦下继续操作。
+     */
+    val boardPowerBlockReassertEvent = MutableStateFlow(0L)
+
+    fun reassertBoardPowerBlock() {
+        boardPowerBlockReassertEvent.value = System.currentTimeMillis()
+    }
+
+    /**
      * Nano AI backend (Aliyun FC). Hardcoded — not user-configurable. The
      * operator only sets the per-device serial number in Settings.
      */

@@ -24,8 +24,8 @@
     <string name="disconnect_wlan_confirm">Disconnect from wifi？</string>
     <string name="msg_restart_confirm">Restart analyzer？</string>
     <string name="msg_shutdown_confirm">Shutdown analyzer？</string>
-    <string name="msg_board_power_need_charger">Battery low, please charge the device</string>
-    <string name="msg_board_power_aging_warn">Battery aging detected, please contact customer service to replace it</string>
+    <string name="msg_board_power_need_charger">Battery level is too low to complete testing. Please charge the device.</string>
+    <string name="msg_board_power_aging_warn">Battery aging detected. Please contact customer service to replace the battery.</string>
     <string name="action_restart">Restart</string>
 
     <string name="action_shutdown">Shutdown</string>

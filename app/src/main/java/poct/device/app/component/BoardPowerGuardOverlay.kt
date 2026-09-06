@@ -42,12 +42,15 @@ import poct.device.app.theme.tipBgColor
 /**
  * 主板欠压重启保护：主流程锁定 overlay。
  * 运维路由组（设置/售后/系统功能）显示常驻 banner，不阻断操作；
- * 其余路由组全屏锁定，不可通过点击/返回键关闭，直到主板确认上电成功。
+ * 其余路由组显示可关闭的提示框——关闭只是把提示收起，锁定状态(boardPowerBlocked)
+ * 本身不受影响；用户真正尝试开始检测时会调用 AppParams.reassertBoardPowerBlock()
+ * 重新弹出同样的提示拦下来（见 HomeMain.kt "开始检测" 入口）。
  */
 @Composable
 fun BoardPowerGuardOverlay(navController: NavController) {
     val blocked by AppParams.boardPowerBlocked.collectAsState()
     val agingWarn by AppParams.boardPowerAgingWarn.collectAsState()
+    val reassertEvent by AppParams.boardPowerBlockReassertEvent.collectAsState()
     if (!blocked) return
 
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -56,17 +59,19 @@ fun BoardPowerGuardOverlay(navController: NavController) {
         groupRoute == RouteConfig.AFTER_SALE ||
         groupRoute == RouteConfig.SYS_FUN
 
+    var promptDismissed by remember { mutableStateOf(false) }
     var agingDialogDismissed by remember { mutableStateOf(false) }
-    LaunchedEffect(blocked) {
-        // 每次进入新的锁定循环，重置老化提示的展示状态
+    LaunchedEffect(blocked, reassertEvent) {
+        // 每次进入新的锁定循环、或用户尝试开始检测被拦下，都重新展示提示
+        promptDismissed = false
         agingDialogDismissed = false
     }
 
     if (isOperationalGroup) {
         BoardPowerGuardBanner()
-    } else {
-        BackHandler(enabled = true) {}
-        BoardPowerGuardFullScreenBlock()
+    } else if (!promptDismissed) {
+        BackHandler(enabled = true) { promptDismissed = true }
+        BoardPowerGuardFullScreenBlock(onDismiss = { promptDismissed = true })
     }
 
     if (agingWarn && !agingDialogDismissed) {
@@ -75,7 +80,7 @@ fun BoardPowerGuardOverlay(navController: NavController) {
 }
 
 @Composable
-private fun BoardPowerGuardFullScreenBlock() {
+private fun BoardPowerGuardFullScreenBlock(onDismiss: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -91,14 +96,26 @@ private fun BoardPowerGuardFullScreenBlock() {
             modifier = Modifier.width(320.dp),
             shape = RoundedCornerShape(8.dp),
         ) {
-            Text(
-                modifier = Modifier.padding(24.dp),
-                text = stringResource(id = R.string.msg_board_power_need_charger),
-                textAlign = TextAlign.Center,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
-                color = fontColor,
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    modifier = Modifier.padding(top = 24.dp, start = 24.dp, end = 24.dp),
+                    text = stringResource(id = R.string.msg_board_power_need_charger),
+                    textAlign = TextAlign.Center,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = fontColor,
+                )
+                AppFilledButton(
+                    modifier = Modifier
+                        .padding(bottom = 20.dp)
+                        .width(120.dp),
+                    onClick = onDismiss,
+                    text = stringResource(id = R.string.btn_label_ok),
+                )
+            }
         }
     }
 }

@@ -182,6 +182,12 @@ fun HomeMainBody(
                     }
                 ),
                 onClick = {
+                    if (AppParams.boardPowerBlocked.value) {
+                        // 主板欠压重启保护仍在锁定中：用户关掉了提示框但还没解决，
+                        // 真正点"开始检测"时重新弹出提示拦下来，不进入 Work 流程
+                        AppParams.reassertBoardPowerBlock()
+                        return@HomeMainEntry
+                    }
                     if (AppParams.initState || AppParams.runtimeModeState.shouldSkipHomeVenueWait()) {
                         App.getSerialHelper().reconnect()
                         navController.navigate(RouteConfig.WORK)
