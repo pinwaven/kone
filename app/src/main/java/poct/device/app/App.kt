@@ -64,6 +64,15 @@ class App : Application() {
             return serialHelper!!
         }
 
+        /**
+         * board power guard 拦截上电时 serialHelper 还没 open()，此时任何串口读写
+         * 调用 getSerialHelper() 都会 NPE 崩溃（例如锁定期间仍可进入的设备信息页）。
+         * 供 transceive() 之类的通用收发出口判空退出，而不是崩溃。
+         */
+        fun getSerialHelperOrNull(): SerialHelperV2? {
+            return serialHelper
+        }
+
         fun getContext(): App {
             return context!!
         }
