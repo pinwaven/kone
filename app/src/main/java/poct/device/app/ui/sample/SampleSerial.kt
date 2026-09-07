@@ -1776,8 +1776,16 @@ class SampleSerialViewModel : ViewModel() {
 
     fun reconnect() {
         viewModelScope.launch(Dispatchers.IO) {
-            App.getSerialHelper().close()
-            App.getSerialHelper().open()
+            // board power guard 拦截上电时串口还没 open()，serialHelper 为 null；
+            // 工厂测试页允许技术人员手动补上电后点重连，这里改成实际去开串口
+            // 而不是崩溃（见 App.openSerialPort()）
+            val serialHelper = App.getSerialHelperOrNull()
+            if (serialHelper == null) {
+                App.getContext().openSerialPort()
+            } else {
+                serialHelper.close()
+                serialHelper.open()
+            }
             withContext(Dispatchers.Main) {
                 text.value = ("串口重连 success")
             }

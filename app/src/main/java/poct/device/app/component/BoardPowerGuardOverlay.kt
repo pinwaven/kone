@@ -1,6 +1,5 @@
 package poct.device.app.component
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -29,6 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import poct.device.app.AppParams
@@ -70,7 +70,6 @@ fun BoardPowerGuardOverlay(navController: NavController) {
     if (isOperationalGroup) {
         BoardPowerGuardBanner()
     } else if (!promptDismissed) {
-        BackHandler(enabled = true) { promptDismissed = true }
         BoardPowerGuardFullScreenBlock(onDismiss = { promptDismissed = true })
     }
 
@@ -79,42 +78,57 @@ fun BoardPowerGuardOverlay(navController: NavController) {
     }
 }
 
+/**
+ * 需要充电的锁定提示框本体，公开供运维路由组（设置/系统功能等）里会实际驱动
+ * 硬件的入口（如"设备初始化"）在点击时按需弹出——那些页面本身默认只显示
+ * banner 不锁全屏，但真要驱动板子时仍需跟主流程一样拦住。
+ *
+ * 用 Dialog 承载而不是裸 Box(fillMaxSize())：Dialog 独立于调用处所在的布局树，
+ * 不管从哪个页面的哪层 Row/Column 里调用都能真正铺满全屏；裸 Box 曾经在嵌套进
+ * SettingMain 菜单的 Row 里时把 fillMaxSize 的约束带进那个 Row，把同一 Row/
+ * Column 里后面的兄弟内容（"临时操作"菜单）撑挤消失。
+ */
 @Composable
-private fun BoardPowerGuardFullScreenBlock(onDismiss: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(tipBgColor)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = {},
-            ),
-        contentAlignment = Alignment.Center,
+fun BoardPowerGuardFullScreenBlock(onDismiss: () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        Surface(
-            modifier = Modifier.width(320.dp),
-            shape = RoundedCornerShape(8.dp),
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(tipBgColor)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {},
+                ),
+            contentAlignment = Alignment.Center,
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+            Surface(
+                modifier = Modifier.width(320.dp),
+                shape = RoundedCornerShape(8.dp),
             ) {
-                Text(
-                    modifier = Modifier.padding(top = 24.dp, start = 24.dp, end = 24.dp),
-                    text = stringResource(id = R.string.msg_board_power_need_charger),
-                    textAlign = TextAlign.Center,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = fontColor,
-                )
-                AppFilledButton(
-                    modifier = Modifier
-                        .padding(bottom = 20.dp)
-                        .width(120.dp),
-                    onClick = onDismiss,
-                    text = stringResource(id = R.string.btn_label_ok),
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Text(
+                        modifier = Modifier.padding(top = 24.dp, start = 24.dp, end = 24.dp),
+                        text = stringResource(id = R.string.msg_board_power_need_charger),
+                        textAlign = TextAlign.Center,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = fontColor,
+                    )
+                    AppFilledButton(
+                        modifier = Modifier
+                            .padding(bottom = 20.dp)
+                            .width(120.dp),
+                        onClick = onDismiss,
+                        text = stringResource(id = R.string.btn_label_ok),
+                    )
+                }
             }
         }
     }

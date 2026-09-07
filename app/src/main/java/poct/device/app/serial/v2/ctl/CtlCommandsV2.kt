@@ -474,9 +474,16 @@ object CtlCommandsV2 {
      */
     private fun transceive(hexMsg: String, timeoutMs: Int): ByteArray? {
         val buffer = synchronized(serialLock) {
-            App.getSerialHelper().drainInput()
-            App.getSerialHelper().sendHex(hexMsg)
-            App.getSerialHelper().readAllData(timeoutMs)
+            val serialHelper = App.getSerialHelperOrNull()
+            if (serialHelper == null) {
+                // board power guard 拦截上电、串口还没 open() 时会走到这里
+                // （例如锁定期间仍可进入的设备信息页发起握手）
+                Timber.w("transceive skipped: serial port not open yet")
+                return@synchronized null
+            }
+            serialHelper.drainInput()
+            serialHelper.sendHex(hexMsg)
+            serialHelper.readAllData(timeoutMs)
         }
         if (buffer == null) {
             Timber.w("transceive no response within %dms", timeoutMs)

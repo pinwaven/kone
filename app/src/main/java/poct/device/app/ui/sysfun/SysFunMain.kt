@@ -19,12 +19,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import poct.device.app.AppParams
 import poct.device.app.R
 import poct.device.app.RouteConfig
 import poct.device.app.component.AppMenuCard
 import poct.device.app.component.AppMenuCardItem
 import poct.device.app.component.AppScaffold
 import poct.device.app.component.AppTopBar
+import poct.device.app.component.BoardPowerGuardFullScreenBlock
 import poct.device.app.ui.home.HomeWorkPre
 
 
@@ -103,12 +105,17 @@ fun SysFunMainBody(navController: NavController) {
 //                    onClick = { AppToastUtil.devShow() }
 //                )
                 var workPreVisible by remember { mutableStateOf(false) }
+                var boardPowerBlockPromptVisible by remember { mutableStateOf(false) }
                 AppMenuCardItem(
                     navController = navController,
                     label = stringResource(id = R.string.home_work_pre_title),
                     painter = painterResource(id = R.mipmap.sbcsh_icon),
                     onClick = {
-                        workPreVisible = true
+                        if (AppParams.boardPowerBlocked.value) {
+                            boardPowerBlockPromptVisible = true
+                        } else {
+                            workPreVisible = true
+                        }
                     }
                 )
                 HomeWorkPre(
@@ -119,6 +126,9 @@ fun SysFunMainBody(navController: NavController) {
                         navController.navigate(RouteConfig.WORK)
                     }
                 )
+                if (boardPowerBlockPromptVisible) {
+                    BoardPowerGuardFullScreenBlock(onDismiss = { boardPowerBlockPromptVisible = false })
+                }
                 // TODO 简化信息
 //                AppMenuCardItem(
 //                    navController = navController,

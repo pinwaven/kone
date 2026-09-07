@@ -112,7 +112,7 @@ class HomeWorkPreViewModel : ViewModel() {
             AppParams.initState = true
             step.value++
 
-            App.getSerialHelper().reconnect()
+            App.getSerialHelperOrNull()?.reconnect()
         }
     }
 

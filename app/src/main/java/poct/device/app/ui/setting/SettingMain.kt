@@ -61,6 +61,7 @@ import poct.device.app.AppParams
 import poct.device.app.R
 import poct.device.app.RouteConfig
 import poct.device.app.component.AppFilledButton
+import poct.device.app.component.BoardPowerGuardFullScreenBlock
 import poct.device.app.component.AppMenuCard
 import poct.device.app.component.AppMenuCardItem
 import poct.device.app.component.AppOutlinedButton
@@ -131,6 +132,7 @@ fun SettingMainBody(
     viewModel: SettingMainViewModel
 ) {
     val workPreVisible = viewModel.workPreVisible.collectAsState()
+    var boardPowerBlockPromptVisible by remember { mutableStateOf(false) }
     var factoryTestPasswordVisible by remember { mutableStateOf(false) }
     var factoryTestPassword by remember { mutableStateOf("") }
     fun submitFactoryTestPassword() {
@@ -240,7 +242,13 @@ fun SettingMainBody(
                     navController = navController,
                     label = stringResource(id = R.string.home_work_pre_title),
                     painter = painterResource(id = R.mipmap.sbcsh_icon),
-                    onClick = { viewModel.workPreVisible.value = true }
+                    onClick = {
+                        if (AppParams.boardPowerBlocked.value) {
+                            boardPowerBlockPromptVisible = true
+                        } else {
+                            viewModel.workPreVisible.value = true
+                        }
+                    }
                 )
 
                 if (AppParams.curUser.role != User.ROLE_CHECKER) {
@@ -266,6 +274,9 @@ fun SettingMainBody(
                         viewModel.workPreVisible.value = false
                     }
                 )
+                if (boardPowerBlockPromptVisible) {
+                    BoardPowerGuardFullScreenBlock(onDismiss = { boardPowerBlockPromptVisible = false })
+                }
                 FactoryTestPasswordDialog(
                     visible = factoryTestPasswordVisible,
                     password = factoryTestPassword,
